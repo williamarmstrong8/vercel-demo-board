@@ -1,9 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
-import { LogOut } from "lucide-react"
-import { authClient } from "@/lib/auth-client"
+import { ShieldCheck } from "lucide-react"
 
 export interface MenuUser {
   name: string
@@ -18,9 +16,7 @@ function initials(name: string, email: string) {
 }
 
 export function UserMenu({ user }: { user: MenuUser }) {
-  const router = useRouter()
   const [open, setOpen] = useState(false)
-  const [signingOut, setSigningOut] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -30,17 +26,6 @@ export function UserMenu({ user }: { user: MenuUser }) {
     document.addEventListener("mousedown", onClick)
     return () => document.removeEventListener("mousedown", onClick)
   }, [])
-
-  const signOut = async () => {
-    setSigningOut(true)
-    try {
-      await authClient.signOut()
-    } catch {
-      // Best-effort; we redirect to /login regardless.
-    }
-    router.replace("/login")
-    router.refresh()
-  }
 
   return (
     <div ref={ref} className="relative">
@@ -60,18 +45,16 @@ export function UserMenu({ user }: { user: MenuUser }) {
 
       {open && (
         <div className="absolute right-0 top-full z-30 mt-2 w-60 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl">
-          <div className="border-b border-border px-3.5 py-3">
+          <div className="px-3.5 py-3">
             <p className="truncate text-sm font-medium">{user.name}</p>
-            <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+            {user.email ? (
+              <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+            ) : null}
+            <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <ShieldCheck className="size-3.5" />
+              Signed in via Vercel Passport
+            </p>
           </div>
-          <button
-            onClick={signOut}
-            disabled={signingOut}
-            className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-sm hover:bg-muted disabled:opacity-60"
-          >
-            <LogOut className="size-4" />
-            {signingOut ? "Signing out…" : "Sign out"}
-          </button>
         </div>
       )}
     </div>
