@@ -1,9 +1,13 @@
 "use client"
 
 import { createAuthClient } from "better-auth/react"
+import { genericOAuthClient } from "better-auth/client/plugins"
 
-// Client-side Better Auth handle. Used by the auth form to sign in / sign up and
-// by the header user menu to read the current session and sign out.
-export const authClient = createAuthClient()
+// Client-side Better Auth handle. The generic OAuth client exposes
+// signIn.oauth2({ providerId }) used by the "Sign in with Vercel" button, and
+// the user menu reads the session and signs out.
+export const authClient = createAuthClient({
+  plugins: [genericOAuthClient()],
+})
 
-export const { useSession, signIn, signUp, signOut } = authClient
+export const { useSession, signIn, signOut } = authClient
