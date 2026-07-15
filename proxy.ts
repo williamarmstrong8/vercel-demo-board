@@ -5,10 +5,13 @@ import { NextResponse, type NextRequest } from "next/server"
 // header (Vercel injects it after authenticating the visitor). If it's somehow
 // missing in production, refuse the request rather than fall through to app code.
 //
-// This is intentionally edge-safe: it only inspects a header (no DB, no auth
+// This is intentionally lightweight: it only inspects a header (no DB, no auth
 // library). Identity resolution + user provisioning happens server-side in
 // lib/auth/current-user.ts.
-export function middleware(request: NextRequest) {
+//
+// Next.js 16 renamed the `middleware.ts` convention to `proxy.ts` (function
+// `middleware` -> `proxy`). See https://nextjs.org/docs/messages/middleware-to-proxy
+export function proxy(request: NextRequest) {
   if (process.env.NODE_ENV !== "production") {
     return NextResponse.next()
   }
