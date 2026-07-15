@@ -21,9 +21,9 @@ export interface BoardData {
 }
 
 // A whiteboard board. `ownerId` holds the owning user's id (Better Auth
-// `user.id`, bridged from the Vercel Passport `external_sub`). The curated
-// public library seed uses a synthetic owner id ("vercel-ecosystem") that has no
-// user row, which is why there is no hard FK constraint on `ownerId`.
+// `user.id` from the visitor's email + password session). The curated public
+// library seed uses a synthetic owner id ("vercel-ecosystem") that has no user
+// row, which is why there is no hard FK constraint on `ownerId`.
 export const boards = pgTable(
   "boards",
   {

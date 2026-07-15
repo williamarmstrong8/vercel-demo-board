@@ -36,8 +36,9 @@ export function UserMenu({ user }: { user: MenuUser }) {
     try {
       await authClient.signOut()
     } catch {
-      // Passport is the edge session; Better Auth sign-out is best-effort.
+      // Best-effort; we redirect to /login regardless.
     }
+    router.replace("/login")
     router.refresh()
   }
 
@@ -62,9 +63,6 @@ export function UserMenu({ user }: { user: MenuUser }) {
           <div className="border-b border-border px-3.5 py-3">
             <p className="truncate text-sm font-medium">{user.name}</p>
             <p className="truncate text-xs text-muted-foreground">{user.email}</p>
-            <p className="mt-1.5 inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-              Signed in via Vercel Passport
-            </p>
           </div>
           <button
             onClick={signOut}

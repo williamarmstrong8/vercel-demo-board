@@ -29,9 +29,9 @@ async function ensurePublicLibrarySeeded(): Promise<void> {
 }
 
 // --- Identity -------------------------------------------------------------
-// Identity is authenticated at the edge by Vercel Passport and resolved into a
-// Better Auth user in lib/auth/current-user.ts. Every board is scoped by this
-// ownerId. In local dev a mock identity is used (see lib/auth/passport.ts).
+// Identity comes from the visitor's Better Auth session (email + password),
+// resolved in lib/auth/current-user.ts. Every board is scoped by this ownerId.
+// There is no RLS on Neon, so every query below filters by ownerId/userId.
 async function getOwnerId(): Promise<string> {
   return requireUserId()
 }

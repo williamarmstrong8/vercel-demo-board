@@ -11,6 +11,7 @@ import { NewBoardButton } from "@/components/home/new-board-button"
 import { LibrarySearch } from "@/components/home/library-search"
 import { UserMenu } from "@/components/home/user-menu"
 import { Star } from "lucide-react"
+import { redirect } from "next/navigation"
 
 function VercelMark({ className }: { className?: string }) {
   return (
@@ -28,8 +29,12 @@ export default async function HomePage({
   const { q } = await searchParams
   const query = q?.trim() ?? ""
 
-  const [user, myBoards, favorites, libraryBoards] = await Promise.all([
-    getCurrentUser(),
+  // Resolve identity first: the board lists below are owner-scoped and throw
+  // without a session, so send unauthenticated visitors to the login page.
+  const user = await getCurrentUser()
+  if (!user) redirect("/login")
+
+  const [myBoards, favorites, libraryBoards] = await Promise.all([
     listMyBoards(),
     listFavoriteBoards(),
     query ? searchPublicBoards(query) : listPublicBoards(),
