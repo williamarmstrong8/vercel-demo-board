@@ -3,10 +3,11 @@
 import { useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Copy, Eye } from "lucide-react"
-import { cloneBoard, type BoardSummary } from "@/app/actions/boards"
+import { cloneBoard, type PublicBoardSummary } from "@/app/actions/boards"
+import { StarButton } from "@/components/home/star-button"
 import { cn } from "@/lib/utils"
 
-export function LibraryCard({ board }: { board: BoardSummary }) {
+export function LibraryCard({ board }: { board: PublicBoardSummary }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
 
@@ -44,8 +45,15 @@ export function LibraryCard({ board }: { board: BoardSummary }) {
 
       <div className="flex flex-1 flex-col gap-3 p-3">
         <div className="min-w-0">
-          <h3 className="truncate text-sm font-medium">{board.name}</h3>
-          <p className="mt-0.5 text-xs text-muted-foreground">by {board.authorName ?? "Vercel"}</p>
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="truncate text-sm font-medium">{board.name}</h3>
+            <StarButton
+              boardId={board.id}
+              starCount={board.starCount}
+              isStarred={board.isStarred}
+            />
+          </div>
+          <p className="mt-0.5 text-xs text-muted-foreground">by {board.author}</p>
           {board.description ? (
             <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
               {board.description}

@@ -17,3 +17,5 @@ node_modules
 # eve
 .workflow-data/
 .eve/
+.vercel
+.env*
