@@ -7,7 +7,6 @@ import { PropertiesPanel } from "@/components/whiteboard/properties-panel"
 import { ZoomControls } from "@/components/whiteboard/zoom-controls"
 import { ModeToggle } from "@/components/whiteboard/mode-toggle"
 import { BoardTopBar } from "@/components/whiteboard/board-top-bar"
-import { PublishToggle } from "@/components/whiteboard/publish-toggle"
 import {
   useWhiteboard,
   enableCloudDraft,
@@ -123,14 +122,7 @@ export function BoardEditor({ board }: { board: BoardSummary }) {
             onSave={handleSave}
           />
         </div>
-        <div className="pointer-events-auto flex items-center gap-2">
-          {canEdit ? (
-            <PublishToggle
-              boardId={board.id}
-              initialIsPublic={board.isPublic}
-              initialDescription={board.description}
-            />
-          ) : null}
+        <div className="pointer-events-auto">
           <ModeToggle />
         </div>
       </div>

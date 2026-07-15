@@ -1,17 +1,7 @@
-import {
-  listFavoriteBoards,
-  listMyBoards,
-  listPublicBoards,
-  searchPublicBoards,
-} from "@/app/actions/boards"
-import { getCurrentUser } from "@/lib/auth/current-user"
+import { listMyBoards, listPublicBoards } from "@/app/actions/boards"
 import { BoardCard } from "@/components/home/board-card"
 import { LibraryCard } from "@/components/home/library-card"
 import { NewBoardButton } from "@/components/home/new-board-button"
-import { LibrarySearch } from "@/components/home/library-search"
-import { UserMenu } from "@/components/home/user-menu"
-import { Star } from "lucide-react"
-import { redirect } from "next/navigation"
 
 function VercelMark({ className }: { className?: string }) {
   return (
@@ -21,24 +11,8 @@ function VercelMark({ className }: { className?: string }) {
   )
 }
 
-export default async function HomePage({
-  searchParams,
-}: {
-  searchParams: Promise<{ q?: string }>
-}) {
-  const { q } = await searchParams
-  const query = q?.trim() ?? ""
-
-  // Resolve identity first: the board lists below are owner-scoped and throw
-  // without a session, so send unauthenticated visitors to the login page.
-  const user = await getCurrentUser()
-  if (!user) redirect("/login")
-
-  const [myBoards, favorites, libraryBoards] = await Promise.all([
-    listMyBoards(),
-    listFavoriteBoards(),
-    query ? searchPublicBoards(query) : listPublicBoards(),
-  ])
+export default async function HomePage() {
+  const [myBoards, publicBoards] = await Promise.all([listMyBoards(), listPublicBoards()])
 
   return (
     <main className="light min-h-dvh bg-background text-foreground">
@@ -48,12 +22,7 @@ export default async function HomePage({
             <VercelMark className="size-4" />
             <span className="text-sm font-semibold tracking-tight">Canvas</span>
           </div>
-          <div className="flex items-center gap-3">
-            <NewBoardButton />
-            {user ? (
-              <UserMenu user={{ name: user.name, email: user.email, image: user.image }} />
-            ) : null}
-          </div>
+          <NewBoardButton />
         </div>
       </header>
 
@@ -64,8 +33,8 @@ export default async function HomePage({
             Your infinite whiteboards
           </h1>
           <p className="mt-2 max-w-xl text-pretty leading-relaxed text-muted-foreground">
-            Sketch architectures, flows, and demos on an infinite canvas. Boards are private to your
-            account by default — publish one to share it with the community library.
+            Sketch architectures, flows, and demos on an infinite canvas. Boards are saved to your
+            account and sync across devices.
           </p>
         </section>
 
@@ -88,56 +57,22 @@ export default async function HomePage({
           </div>
         </section>
 
-        {/* Favorites */}
-        {favorites.length > 0 ? (
-          <section className="mb-16">
-            <div className="mb-1 flex items-center gap-2">
-              <Star className="size-4 text-amber-500" />
-              <h2 className="text-lg font-semibold tracking-tight">
-                Your favorites
-                <span className="ml-2 text-sm font-normal text-muted-foreground">
-                  {favorites.length}
-                </span>
-              </h2>
-            </div>
-            <p className="mb-5 text-sm leading-relaxed text-muted-foreground">
-              Public boards you&apos;ve starred.
-            </p>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {favorites.map((board) => (
-                <LibraryCard key={board.id} board={board} />
-              ))}
-            </div>
-          </section>
-        ) : null}
-
         {/* Public library */}
         <section>
-          <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <VercelMark className="size-3.5 text-muted-foreground" />
-              <h2 className="text-lg font-semibold tracking-tight">Community library</h2>
-            </div>
-            <LibrarySearch initialQuery={query} />
+          <div className="mb-1 flex items-center gap-2">
+            <VercelMark className="size-3.5 text-muted-foreground" />
+            <h2 className="text-lg font-semibold tracking-tight">Vercel ecosystem library</h2>
           </div>
           <p className="mb-5 text-sm leading-relaxed text-muted-foreground">
-            Public boards shared by the community. Open one to explore, clone it into your own boards,
-            or star it to save it to your favorites.
+            Community boards published across the Vercel ecosystem. Open one to explore, or clone it
+            into your own boards.
           </p>
 
-          {libraryBoards.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground">
-              {query
-                ? `No public boards match “${query}”.`
-                : "No public boards yet. Publish one from its editor to share it here."}
-            </p>
-          ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {libraryBoards.map((board) => (
-                <LibraryCard key={board.id} board={board} />
-              ))}
-            </div>
-          )}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {publicBoards.map((board) => (
+              <LibraryCard key={board.id} board={board} />
+            ))}
+          </div>
         </section>
       </div>
     </main>
