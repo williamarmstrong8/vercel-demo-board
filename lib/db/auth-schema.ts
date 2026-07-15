@@ -13,6 +13,11 @@ export const user = pgTable("user", {
     .$defaultFn(() => false)
     .notNull(),
   image: text("image"),
+  // RBAC role. New accounts default to the least-privileged "viewer"; the
+  // first account ever created (or one matching BOOTSTRAP_ADMIN_EMAIL) is
+  // promoted to "admin" by a Better Auth create hook. Never settable by the
+  // client — see lib/auth.ts (additionalFields.role.input === false).
+  role: text("role").notNull().default("viewer"),
   createdAt: timestamp("created_at")
     .$defaultFn(() => new Date())
     .notNull(),
