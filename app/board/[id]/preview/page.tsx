@@ -1,5 +1,4 @@
 import { getBoard } from "@/app/actions/boards"
-import { getCurrentUser } from "@/lib/auth/current-user"
 import { BoardPreviewCanvas } from "@/components/whiteboard/board-preview-canvas"
 import { notFound } from "next/navigation"
 
@@ -11,9 +10,6 @@ export default async function BoardPreviewPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  // Owner-scoped; this route is only ever embedded from the authenticated grid.
-  const user = await getCurrentUser()
-  if (!user) notFound()
   const board = await getBoard(id)
   if (!board) notFound()
   return (
