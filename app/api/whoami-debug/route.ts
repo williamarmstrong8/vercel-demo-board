@@ -32,5 +32,22 @@ export async function GET() {
     ),
   )
 
-  return NextResponse.json({ interesting, all }, { headers: { "cache-control": "no-store" } })
+  // Decode (WITHOUT verifying) the OIDC token's claims so we can see which
+  // fields carry the email/name. This is diagnostic only.
+  let oidcClaims: unknown = null
+  const oidcToken = h.get("x-vercel-oidc-token")
+  if (oidcToken) {
+    try {
+      const payload = oidcToken.split(".")[1]
+      const json = Buffer.from(payload, "base64url").toString("utf8")
+      oidcClaims = JSON.parse(json)
+    } catch (e) {
+      oidcClaims = { decodeError: (e as Error).message }
+    }
+  }
+
+  return NextResponse.json(
+    { oidcClaims, interesting, all },
+    { headers: { "cache-control": "no-store" } },
+  )
 }
