@@ -1885,8 +1885,8 @@ function RequestTimeline({ requests, now, overloaded = false }: { requests: Demo
       {requests.length === 0 && <span style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#555", fontFamily: "var(--font-mono)", fontSize: 8.5 }}>idle capacity</span>}
       {requests.map((request, index) => {
         const progress = Math.min(Math.max((now - request.startedAt) / request.duration, 0), 1)
-        const spinProgress = Math.min(Math.max((progress - 0.88) / 0.12, 0), 1)
-        const traceWidth = progress * 88
+        const spinProgress = Math.min(Math.max((progress - 0.82) / 0.18, 0), 1)
+        const traceWidth = Math.min(progress / 0.82, 1) * 88
         const solidWidth = Math.min(traceWidth, 17.6)
         const traceLeft = 100 - traceWidth
         return (
@@ -1961,12 +1961,12 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
       setNow(tick)
       const activeCount = traces.filter((trace) => tick - trace.startedAt < trace.duration).length
       if (activeCount) setUsage((current) => current + elapsed * activeCount)
-      setTraces((current) => current.filter((trace) => tick - trace.startedAt < trace.duration))
+      setTraces((current) => current.filter((trace) => tick - trace.startedAt < trace.duration + 500))
     }, 80)
     return () => window.clearInterval(timer)
   }, [traces])
   const instanceIds = Array.from(new Set(traces.map((trace) => trace.instance))).sort((a, b) => a - b).slice(-3)
-  const anyActive = traces.length > 0
+  const anyActive = traces.some((trace) => now - trace.startedAt < trace.duration)
   return (
     <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
       <header style={{ flexShrink: 0, minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 17 }}>▧</span><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Fluid</strong><span style={{ color: "#777", fontSize: 9.5 }}>Vercel Functions</span></div></div><span style={{ fontFamily: "var(--font-mono)", color: "#888", fontSize: 10 }}>Usage: <b style={{ color: "#ddd", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
@@ -1974,9 +1974,12 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
         {instanceIds.length === 0 ? <div style={{ margin: "auto", color: "#555", fontFamily: "var(--font-mono)", fontSize: 9 }}>Waiting for requests</div> : instanceIds.map((instance) => {
           const row = traces.filter((trace) => trace.instance === instance)
           const rowUsage = row.reduce((total, trace) => total + Math.min(Math.max(now - trace.startedAt, 0), trace.duration), 0) / 1000
+          const latestEnd = Math.max(...row.map((trace) => trace.startedAt + trace.duration))
+          const closingProgress = Math.min(Math.max((now - latestEnd) / 500, 0), 1)
+          const rowActive = row.some((trace) => now < trace.startedAt + trace.duration)
           return (
-            <div key={instance} style={{ flexShrink: 0, display: "flex", flexDirection: "column", gap: 7 }}>
-              <div style={{ padding: "0 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ color: "#7d7d86", fontFamily: "var(--font-mono)", fontSize: 10.5 }}>fluid-instance-{instance + 1}</span><span style={{ display: "flex", alignItems: "center", gap: 8 }}><FluidGlyph active /><span style={{ width: 32, color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>{rowUsage.toFixed(1)}s</span></span></div>
+            <div key={instance} style={{ flexShrink: 0, display: "flex", flexDirection: "column", gap: 7, opacity: 1 - closingProgress, transform: `translateY(${-closingProgress * 4}px)`, transition: "opacity 80ms linear, transform 80ms linear" }}>
+              <div style={{ padding: "0 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ color: "#7d7d86", fontFamily: "var(--font-mono)", fontSize: 10.5 }}>fluid-instance-{instance + 1}</span><span style={{ display: "flex", alignItems: "center", gap: 8 }}><FluidGlyph active={rowActive} /><span style={{ width: 32, color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>{rowUsage.toFixed(1)}s</span></span></div>
               <RequestTimeline requests={row} now={now} />
             </div>
           )
