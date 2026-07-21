@@ -352,7 +352,7 @@ function LoginPage({ populated, data, domain }: { populated: boolean; data: unkn
   const name = pick(data, ["name", "user", "username", "email"], "Ada Lovelace")
   return (
     <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, background: "#fafafa" }}>
-      <div style={{ width: 220, background: "#fff", border: "1px solid #eee", borderRadius: 12, padding: 18, display: "flex", flexDirection: "column", gap: 12, boxShadow: "0 4px 16px rgba(0,0,0,0.05)" }}>
+      <div style={{ width: 220, background: "#fff", border: "1px solid #eee", borderRadius: 12, padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
         {populated ? (
           <>
             <span style={{ width: 34, height: 34, borderRadius: 9999, background: "#10b981", display: "flex", alignItems: "center", justifyContent: "center", alignSelf: "center", color: "#fff", fontFamily: "var(--font-sans)", fontSize: 18, fontWeight: 700 }}>

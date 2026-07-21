@@ -176,7 +176,7 @@ export function PropertiesPanel() {
   // The eve agent (file-tree) block gets its own edit menu with structure templates.
   if (first.type === "filetree" && selected.length === 1) {
     return (
-      <div className="pointer-events-auto flex max-h-full w-60 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
+      <div className="pointer-events-auto flex max-h-full w-60 flex-col overflow-hidden rounded-xl border border-border bg-card">
         <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-4 py-3">
           <span className="text-sm font-semibold">{labelFor(first)}</span>
           <div className="flex gap-1">
@@ -242,7 +242,7 @@ export function PropertiesPanel() {
   const isNode = ["code", "terminal", "website", "server"].includes(first.type)
   if (isNode && selected.length === 1) {
     return (
-      <div className="pointer-events-auto flex max-h-full w-60 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
+      <div className="pointer-events-auto flex max-h-full w-60 flex-col overflow-hidden rounded-xl border border-border bg-card">
         <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-4 py-3">
           <span className="text-sm font-semibold">{labelFor(first)}</span>
           <div className="flex gap-1">
@@ -404,7 +404,7 @@ export function PropertiesPanel() {
   const fontSize = (common("fontSize") as number) ?? 24
 
   return (
-    <div className="pointer-events-auto flex max-h-full w-60 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
+    <div className="pointer-events-auto flex max-h-full w-60 flex-col overflow-hidden rounded-xl border border-border bg-card">
       <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-4 py-3">
         <span className="text-sm font-semibold">
           {selected.length > 1 ? `${selected.length} selected` : labelFor(first)}

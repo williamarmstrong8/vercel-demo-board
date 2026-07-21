@@ -30,7 +30,7 @@ export function ZoomControls() {
   }
 
   return (
-    <div className="flex items-center gap-1 rounded-xl border border-border bg-card/90 p-1 shadow-sm backdrop-blur-md">
+    <div className="flex items-center gap-1 rounded-xl border border-border bg-card/90 p-1 backdrop-blur-md">
       <button
         type="button"
         onClick={() => zoomBy(1 / 1.2)}

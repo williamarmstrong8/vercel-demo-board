@@ -151,7 +151,7 @@ export function ConnectionCurves() {
                     justifyContent: "center",
                     cursor: "pointer",
                     pointerEvents: "auto",
-                    boxShadow: "0 1px 4px rgba(0,0,0,0.15)",
+                    boxShadow: "none",
                   }}
                 >
                   <X size={12} />
@@ -254,7 +254,7 @@ export function ConnectionHandles() {
                     border: build ? "2px solid #0070f3" : "none",
                     cursor: build ? "crosshair" : "default",
                     pointerEvents: build ? "auto" : "none",
-                    boxShadow: build ? "0 1px 3px rgba(0,0,0,0.2)" : "none",
+                    boxShadow: "none",
                   }}
                 />
               )
