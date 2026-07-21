@@ -96,12 +96,15 @@ export const CanvasElementView = memo(function CanvasElementView({ el }: { el: C
   const editing = useWhiteboard((s) => s.editingId === el.id)
   const connections = useWhiteboard((s) => (s.projects.find((p) => p.id === s.currentId) ?? s.projects[0]).connections)
   const active = phase === "running"
+  const isLinear = el.type === "arrow" || el.type === "line"
   const wrapperStyle: React.CSSProperties = {
     position: "absolute",
     left: b.x,
     top: b.y,
-    width: b.width,
-    height: b.height,
+    // Axis-aligned lines have a zero-width or zero-height geometric bound.
+    // Keep a one-pixel SVG viewport so the stroke and marker remain paintable.
+    width: isLinear ? Math.max(1, b.width) : b.width,
+    height: isLinear ? Math.max(1, b.height) : b.height,
     transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined,
     opacity: el.opacity,
     pointerEvents: "none",
