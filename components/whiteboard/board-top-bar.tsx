@@ -53,7 +53,7 @@ export function BoardTopBar({
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-neutral-900 py-1.5 pl-2 pr-2 text-sm text-white shadow-2xl">
+    <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-neutral-900 py-1.5 pl-2 pr-2 text-sm text-white shadow-md">
       <button
         onClick={goBack}
         className="flex size-7 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-white"

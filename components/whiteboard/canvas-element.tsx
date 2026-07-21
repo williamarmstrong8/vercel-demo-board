@@ -947,7 +947,7 @@ function CardView({ el }: { el: CanvasElement }) {
         borderRadius: el.rounded ? 12 : 2,
         background: el.fill === "transparent" ? "#ffffff" : el.fill,
         border: noStroke ? "none" : `${el.strokeWidth}px solid ${el.stroke}`,
-        boxShadow: "0 1px 2px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.06)",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
@@ -1009,7 +1009,7 @@ function CodeView({ el }: { el: CanvasElement }) {
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
-        boxShadow: "0 1px 2px rgba(0,0,0,0.2), 0 12px 32px rgba(0,0,0,0.18)",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.2)",
       }}
     >
       <div
@@ -1167,7 +1167,7 @@ function FileTreeView({ el }: { el: CanvasElement }) {
         background: "#0a0a0a",
         border: "1px solid #2e2e2e",
         overflow: "hidden",
-        boxShadow: "0 1px 2px rgba(0,0,0,0.2), 0 12px 32px rgba(0,0,0,0.18)",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.2)",
       }}
     >
       <div
@@ -1372,7 +1372,7 @@ function TerminalView({ el }: { el: CanvasElement }) {
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
-        boxShadow: "0 1px 2px rgba(0,0,0,0.2), 0 12px 32px rgba(0,0,0,0.18)",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.2)",
       }}
     >
       <div
@@ -1455,7 +1455,7 @@ function WebsiteView({ el, phase }: { el: CanvasElement; phase: RunPhase | undef
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
-        boxShadow: "0 1px 2px rgba(0,0,0,0.06), 0 12px 32px rgba(0,0,0,0.08)",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
       }}
     >
       {/* browser chrome */}

@@ -14,7 +14,7 @@ export function ModeToggle() {
   const setMode = useWhiteboard((s) => s.setMode)
 
   return (
-    <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-neutral-900 p-1.5 shadow-2xl">
+    <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-neutral-900 p-1.5 shadow-md">
       {OPTIONS.map((o) => {
         const Icon = o.icon
         const active = mode === o.id

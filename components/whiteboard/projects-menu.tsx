@@ -52,7 +52,7 @@ export function ProjectsMenu() {
     <div ref={ref} className="pointer-events-auto relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 rounded-xl border border-white/10 bg-neutral-900 py-2 pl-3 pr-2.5 text-sm text-white shadow-2xl transition-colors hover:bg-neutral-800"
+        className="flex items-center gap-2 rounded-xl border border-white/10 bg-neutral-900 py-2 pl-3 pr-2.5 text-sm text-white shadow-md transition-colors hover:bg-neutral-800"
       >
         <VercelMark className="size-3.5" />
         <span className="max-w-[160px] truncate font-medium">{current?.name}</span>
