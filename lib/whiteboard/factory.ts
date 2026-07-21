@@ -172,7 +172,7 @@ export function createElement(
         ...base,
         type: "serverlesscompute",
         width: 410,
-        height: 390,
+        height: 330,
         title: "Serverless Functions",
         spendStart: 0,
         spendRatePerSecond: 0.14,
