@@ -2113,7 +2113,7 @@ function ServerlessComputeView({ el }: { el: CanvasElement }) {
         (trace) => tick - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION,
       ).length
       if (activeInstances > 0) setUsage((current) => current + elapsed * activeInstances)
-      setTraces((current) => current.filter((trace) => tick - trace.startedAt < trace.duration + 500))
+      setTraces((current) => current.filter((trace) => tick - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION + 500))
     }, 80)
     return () => window.clearInterval(timer)
   }, [traces])
@@ -2125,7 +2125,7 @@ function ServerlessComputeView({ el }: { el: CanvasElement }) {
       <div style={{ minHeight: 0, flex: 1, overflow: "hidden", padding: "12px 0", display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 12 }}>
         {visibleTraces.length === 0 ? <div style={{ margin: "auto", color: "#555", fontFamily: "var(--font-mono)", fontSize: 9 }}>Waiting for requests</div> : visibleTraces.map((trace) => {
           const billingEnd = trace.startedAt + trace.duration * FLUID_BILLING_FRACTION
-          const latestEnd = trace.startedAt + trace.duration
+          const latestEnd = billingEnd
           const rowUsage = Math.min(Math.max(now - trace.startedAt, 0), billingEnd - trace.startedAt) / 1000
           const openingProgress = Math.min(Math.max((now - trace.startedAt) / 350, 0), 1)
           const closingProgress = Math.min(Math.max((now - latestEnd) / 500, 0), 1)
