@@ -1885,14 +1885,14 @@ function RequestTimeline({ requests, now, overloaded = false }: { requests: Demo
       {requests.length === 0 && <span style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#555", fontFamily: "var(--font-mono)", fontSize: 8.5 }}>idle capacity</span>}
       {requests.map((request, index) => {
         const progress = Math.min(Math.max((now - request.startedAt) / request.duration, 0), 1)
-        const callEnd = 0.28
-        const waitEnd = 0.82
-        const waitProgress = Math.min(Math.max((progress - callEnd) / (waitEnd - callEnd), 0), 1)
-        const spinProgress = Math.min(Math.max((progress - waitEnd) / (1 - waitEnd), 0), 1)
-        const traceLeft = 86 - progress * 62
-        const phaseOpacity = progress < callEnd ? 1 : 1 - waitProgress * 0.62
-        const completionOpacity = 1 - spinProgress
-        return <i key={request.id} style={{ position: "absolute", top: 7 + index * 8, left: `${traceLeft}%`, width: "18%", height: 5, borderRadius: 99, background: request.color, opacity: phaseOpacity * completionOpacity, transition: "left 80ms linear, opacity 80ms linear" }} />
+        const spinProgress = Math.min(Math.max((progress - 0.88) / 0.12, 0), 1)
+        const width = progress * 88
+        return (
+          <span key={request.id} style={{ position: "absolute", top: 7 + index * 8, right: 0, width: `${width}%`, height: 5, opacity: 1 - spinProgress, transition: "width 80ms linear, opacity 80ms linear" }}>
+            <i style={{ position: "absolute", inset: 0, borderRadius: 99, background: request.color, opacity: 0.3 }} />
+            <i style={{ position: "absolute", left: 0, width: "20%", height: "100%", borderRadius: 99, background: request.color }} />
+          </span>
+        )
       })}
       {overloaded && <span style={{ position: "absolute", inset: 0, background: "repeating-linear-gradient(45deg, transparent 0 20px, rgba(239,43,45,.32) 20px 40px)", pointerEvents: "none" }} />}
     </div>
