@@ -1886,11 +1886,13 @@ function RequestTimeline({ requests, now, overloaded = false }: { requests: Demo
       {requests.map((request, index) => {
         const progress = Math.min(Math.max((now - request.startedAt) / request.duration, 0), 1)
         const spinProgress = Math.min(Math.max((progress - 0.88) / 0.12, 0), 1)
-        const width = progress * 88
+        const traceWidth = progress * 88
+        const solidWidth = Math.min(traceWidth, 17.6)
+        const traceLeft = 100 - traceWidth
         return (
-          <span key={request.id} style={{ position: "absolute", top: 7 + index * 8, right: 0, width: `${width}%`, height: 5, opacity: 1 - spinProgress, transition: "width 80ms linear, opacity 80ms linear" }}>
-            <i style={{ position: "absolute", inset: 0, borderRadius: 99, background: request.color, opacity: 0.3 }} />
-            <i style={{ position: "absolute", left: 0, width: "20%", height: "100%", borderRadius: 99, background: request.color }} />
+          <span key={request.id} style={{ position: "absolute", top: 7 + index * 8, left: 0, width: "100%", height: 5, opacity: 1 - spinProgress, transition: "opacity 80ms linear" }}>
+            <i style={{ position: "absolute", left: `${traceLeft + solidWidth}%`, right: 0, height: "100%", borderRadius: 99, background: request.color, opacity: 0.3 }} />
+            <i style={{ position: "absolute", left: `${traceLeft}%`, width: `${solidWidth}%`, height: "100%", borderRadius: 99, background: request.color, transition: "left 80ms linear" }} />
           </span>
         )
       })}
