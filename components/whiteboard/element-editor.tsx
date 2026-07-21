@@ -157,6 +157,7 @@ export function ElementEditor({ id }: { id: string }) {
         </div>
         <textarea
           ref={textRef}
+          className="wb-scroll-native"
           value={el.text || ""}
           spellCheck={false}
           onChange={(e) => update([id], { text: e.target.value })}
@@ -234,6 +235,7 @@ export function ElementEditor({ id }: { id: string }) {
         }}
       />
       <textarea
+        className="wb-scroll-native"
         value={el.text || ""}
         onChange={(e) => update([id], { text: e.target.value })}
         onBlur={commit}
