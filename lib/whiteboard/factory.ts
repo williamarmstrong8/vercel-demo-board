@@ -136,6 +136,47 @@ export function createElement(
         strokeWidth: 1,
         rounded: true,
       }
+    case "ec2":
+      return {
+        ...base,
+        type: "ec2",
+        width: 410,
+        height: 390,
+        title: "Amazon EC2",
+        spendStart: 12.4,
+        spendRatePerSecond: 0.45,
+        fill: "#0a0a0a",
+        stroke: "#2e2e2e",
+        strokeWidth: 1,
+        rounded: true,
+      }
+    case "fluidcompute":
+      return {
+        ...base,
+        type: "fluidcompute",
+        width: 410,
+        height: 390,
+        title: "Vercel Functions",
+        spendStart: 3.1,
+        spendRatePerSecond: 0.14,
+        activeDutyCycle: 0.42,
+        fill: "#0a0a0a",
+        stroke: "#2e2e2e",
+        strokeWidth: 1,
+        rounded: true,
+      }
+    case "requestdemo":
+      return {
+        ...base,
+        type: "requestdemo",
+        width: 360,
+        height: 112,
+        title: "Request traffic",
+        fill: "#0a0a0a",
+        stroke: "#2e2e2e",
+        strokeWidth: 1,
+        rounded: true,
+      }
     case "image":
       return { ...base, type: "image", width: 240, height: 160, fill: "transparent" }
       case "channelui":

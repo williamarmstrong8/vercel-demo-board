@@ -86,7 +86,7 @@ export function Toolbar() {
   }
 
   return (
-    <div className="pointer-events-auto flex items-center gap-1 rounded-xl border border-white/10 bg-neutral-900 p-1.5 shadow-2xl">
+    <div className="pointer-events-auto flex items-center gap-1 rounded-xl border border-white/10 bg-neutral-900 p-1.5">
       {TOOLS.map((t) => {
         const Icon = t.icon
         const active = tool === t.id

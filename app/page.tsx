@@ -1,6 +1,5 @@
-import { listMyBoards, listPublicBoards } from "@/app/actions/boards"
+import { listMyBoards } from "@/app/actions/boards"
 import { BoardCard } from "@/components/home/board-card"
-import { LibraryCard } from "@/components/home/library-card"
 import { NewBoardButton } from "@/components/home/new-board-button"
 
 function VercelMark({ className }: { className?: string }) {
@@ -12,7 +11,7 @@ function VercelMark({ className }: { className?: string }) {
 }
 
 export default async function HomePage() {
-  const [myBoards, publicBoards] = await Promise.all([listMyBoards(), listPublicBoards()])
+  const myBoards = await listMyBoards()
 
   return (
     <main className="light min-h-dvh bg-background text-foreground">
@@ -57,23 +56,6 @@ export default async function HomePage() {
           </div>
         </section>
 
-        {/* Public library */}
-        <section>
-          <div className="mb-1 flex items-center gap-2">
-            <VercelMark className="size-3.5 text-muted-foreground" />
-            <h2 className="text-lg font-semibold tracking-tight">Vercel ecosystem library</h2>
-          </div>
-          <p className="mb-5 text-sm leading-relaxed text-muted-foreground">
-            Community boards published across the Vercel ecosystem. Open one to explore, or clone it
-            into your own boards.
-          </p>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {publicBoards.map((board) => (
-              <LibraryCard key={board.id} board={board} />
-            ))}
-          </div>
-        </section>
       </div>
     </main>
   )

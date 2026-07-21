@@ -16,6 +16,9 @@ export type Tool =
   | "filetree"
   | "channelui"
   | "aigateway"
+  | "ec2"
+  | "fluidcompute"
+  | "requestdemo"
 
 export type ElementType =
   | "rectangle"
@@ -34,6 +37,9 @@ export type ElementType =
   | "channelui"
   | "sandbox"
   | "aigateway"
+  | "ec2"
+  | "fluidcompute"
+  | "requestdemo"
 
 // A single file inside an eve agent file-tree block. Clicking its row opens the
 // code in a companion code block beside the tree.
@@ -115,6 +121,11 @@ export interface CanvasElement {
   // AI Gateway block: the currently-selected model string in `creator/model`
   // form. Swapping it is the "one line of code" the block showcases.
   gatewayModel?: string
+  // illustrative compute comparison blocks. Runtime counters derive from these
+  // stable values; animation ticks are intentionally never persisted.
+  spendStart?: number
+  spendRatePerSecond?: number
+  activeDutyCycle?: number
   // sandbox terminal block (auto-spawned when the agent runs shell commands)
   sandboxParent?: string // id of the channel UI whose session this mirrors
   runs?: SandboxRun[] // captured shell activity (bash / run_command), oldest first

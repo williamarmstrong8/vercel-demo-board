@@ -1,7 +1,7 @@
 "use client"
 
 import { memo, useState, useLayoutEffect, useEffect, useRef, useMemo } from "react"
-import { Play, Loader2, Check, RotateCw, Lock, ChevronDown, ChevronRight, Folder, FileText, SquareTerminal, ExternalLink, Waypoints, Server } from "lucide-react"
+import { Play, Loader2, Check, RotateCw, Lock, ChevronDown, ChevronRight, Folder, FileText, SquareTerminal, ExternalLink, Waypoints, Server, Send } from "lucide-react"
 import type { AgentFile, CanvasElement, RunPhase } from "@/lib/whiteboard/types"
 import { getBounds } from "@/lib/whiteboard/geometry"
 import { getCodeTheme, tokenizeLine } from "@/lib/whiteboard/code-themes"
@@ -223,7 +223,7 @@ function ChannelLogos({ tree }: { tree: CanvasElement }) {
             border: `1px solid ${isActive ? "transparent" : "#2e2e2e"}`,
             background: isActive ? "#1a1a1a" : "#111",
             cursor: "pointer",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
+            boxShadow: "none",
           }}
         >
           {channel.logo ? (
@@ -724,7 +724,7 @@ function RunButton({ id, phase }: { id: string; phase: RunPhase | undefined }) {
           fontSize: 13,
           fontWeight: 500,
           cursor: anyRunning ? "default" : "pointer",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
+          boxShadow: "none",
           transition: "background 0.15s ease",
           whiteSpace: "nowrap",
         }}
@@ -774,7 +774,7 @@ function RunButton({ id, phase }: { id: string; phase: RunPhase | undefined }) {
             color: "#ffffff",
             cursor: anyRunning ? "default" : "pointer",
             opacity: anyRunning ? 0.5 : 1,
-            boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
+            boxShadow: "none",
           }}
         >
           <RotateCw size={14} />
@@ -813,7 +813,13 @@ function renderContent(el: CanvasElement, b: { width: number; height: number }, 
       return <SandboxView el={el} />
     case "aigateway":
       return <AiGatewayView el={el} />
-    case "image":
+    case "ec2":
+      return <Ec2View el={el} />
+  case "fluidcompute":
+  return <FluidComputeView el={el} />
+  case "requestdemo":
+  return <RequestDemoView el={el} />
+  case "image":
       return <ImageView el={el} b={b} />
     default:
       return null
@@ -947,7 +953,7 @@ function CardView({ el }: { el: CanvasElement }) {
         borderRadius: el.rounded ? 12 : 2,
         background: el.fill === "transparent" ? "#ffffff" : el.fill,
         border: noStroke ? "none" : `${el.strokeWidth}px solid ${el.stroke}`,
-        boxShadow: "0 1px 2px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.06)",
+        boxShadow: "none",
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
@@ -1009,7 +1015,7 @@ function CodeView({ el }: { el: CanvasElement }) {
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
-        boxShadow: "0 1px 2px rgba(0,0,0,0.2), 0 12px 32px rgba(0,0,0,0.18)",
+        boxShadow: "none",
       }}
     >
       <div
@@ -1167,7 +1173,7 @@ function FileTreeView({ el }: { el: CanvasElement }) {
         background: "#0a0a0a",
         border: "1px solid #2e2e2e",
         overflow: "hidden",
-        boxShadow: "0 1px 2px rgba(0,0,0,0.2), 0 12px 32px rgba(0,0,0,0.18)",
+        boxShadow: "none",
       }}
     >
       <div
@@ -1372,7 +1378,7 @@ function TerminalView({ el }: { el: CanvasElement }) {
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
-        boxShadow: "0 1px 2px rgba(0,0,0,0.2), 0 12px 32px rgba(0,0,0,0.18)",
+        boxShadow: "none",
       }}
     >
       <div
@@ -1455,7 +1461,7 @@ function WebsiteView({ el, phase }: { el: CanvasElement; phase: RunPhase | undef
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
-        boxShadow: "0 1px 2px rgba(0,0,0,0.06), 0 12px 32px rgba(0,0,0,0.08)",
+        boxShadow: "none",
       }}
     >
       {/* browser chrome */}
@@ -1770,6 +1776,253 @@ function ServerView({ el, phase }: { el: CanvasElement; phase: RunPhase | undefi
           {status === "idle" ? "ready" : status === "processing" ? "handling request…" : "200 OK · 42ms"}
         </span>
       </div>
+    </div>
+  )
+}
+
+function useIllustrativeSpend(start: number, ratePerSecond: number, enabled = true) {
+  const [spend, setSpend] = useState(start)
+  const lastTick = useRef(Date.now())
+
+  useEffect(() => {
+    const tick = () => {
+      const now = Date.now()
+      const elapsed = (now - lastTick.current) / 1000
+      lastTick.current = now
+      if (enabled) setSpend((current) => current + elapsed * ratePerSecond)
+    }
+    const reset = () => {
+      lastTick.current = Date.now()
+      setSpend(0)
+    }
+    const timer = window.setInterval(tick, 80)
+    window.addEventListener(RESET_REQUEST_EVENT, reset)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener(RESET_REQUEST_EVENT, reset)
+    }
+  }, [enabled, ratePerSecond])
+
+  return { spend, active: enabled }
+}
+
+const computeToken = {
+  surface: "var(--card)",
+  surfaceRaised: "var(--muted)",
+  border: "var(--border)",
+  borderStrong: "var(--ring)",
+  text: "var(--card-foreground)",
+  textSecondary: "var(--foreground)",
+  textMuted: "var(--muted-foreground)",
+  green: "oklch(0.62 0.19 145)",
+  greenBg: "oklch(0.96 0.04 145)",
+} as const
+
+function SpendDisplay({ amount, rateLabel }: { amount: number; rateLabel: string }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, minWidth: 112 }}>
+      <span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: 24, lineHeight: 1, fontWeight: 600, color: computeToken.text, letterSpacing: "-0.04em" }}>
+        ${amount.toFixed(2)}
+      </span>
+      <span style={{ fontSize: 9, color: computeToken.textMuted, textTransform: "uppercase", letterSpacing: "0.08em", textAlign: "center" }}>
+        {rateLabel}
+      </span>
+    </div>
+  )
+}
+
+type DemoRequest = { id: number; color: string; startedAt: number; duration: number }
+const REQUEST_EVENT = "v0-compute-demo-request"
+const RESET_REQUEST_EVENT = "v0-compute-demo-reset"
+const REQUEST_COLORS = ["#d946ef", "#14b8a6", "#2563eb", "#f59e0b"]
+const FLUID_WORK_COLORS = ["#5b102b", "#18544d", "#173d78", "#71470b"]
+let requestSequence = 0
+
+function useDemoRequests() {
+  const [requests, setRequests] = useState<DemoRequest[]>([])
+  useEffect(() => {
+    const receive = (event: Event) => {
+      const request = (event as CustomEvent<DemoRequest>).detail
+      setRequests((current) => [...current.slice(-7), request])
+    }
+    const reset = () => setRequests([])
+    window.addEventListener(REQUEST_EVENT, receive)
+    window.addEventListener(RESET_REQUEST_EVENT, reset)
+    const cleanup = window.setInterval(() => setRequests((current) => current.filter((request) => Date.now() - request.startedAt < request.duration)), 120)
+    return () => {
+      window.removeEventListener(REQUEST_EVENT, receive)
+      window.removeEventListener(RESET_REQUEST_EVENT, reset)
+      window.clearInterval(cleanup)
+    }
+  }, [])
+  return requests
+}
+
+function RequestDemoView({ el }: { el: CanvasElement }) {
+  const [sent, setSent] = useState(0)
+  const run = (event: React.MouseEvent) => {
+    event.stopPropagation()
+    const id = ++requestSequence
+    const request: DemoRequest = { id, color: REQUEST_COLORS[(id - 1) % REQUEST_COLORS.length], startedAt: Date.now(), duration: 4600 }
+    window.dispatchEvent(new CustomEvent(REQUEST_EVENT, { detail: request }))
+    setSent((count) => count + 1)
+  }
+  const reset = (event: React.MouseEvent) => {
+    event.stopPropagation()
+    requestSequence = 0
+    setSent(0)
+    window.dispatchEvent(new Event(RESET_REQUEST_EVENT))
+  }
+  const controlStyle: React.CSSProperties = { pointerEvents: "auto", display: "inline-flex", alignItems: "center", justifyContent: "center", height: 30, borderRadius: 9999, border: "1px solid rgba(255,255,255,0.14)", background: "#000000", color: "#ffffff", fontFamily: "var(--font-sans)", cursor: "pointer", boxShadow: "none" }
+  return (
+    <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, fontFamily: "var(--font-sans)" }}>
+      <div style={{ width: "100%", flex: 1, border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: computeToken.surface, color: computeToken.text, padding: "12px 15px", display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ width: 36, height: 36, border: `1px solid ${computeToken.border}`, borderRadius: 8, background: computeToken.surfaceRaised, display: "flex", alignItems: "center", justifyContent: "center" }}><Send size={15} /></div>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}><strong style={{ fontSize: 13 }}>Request traffic</strong><span style={{ color: computeToken.textMuted, fontSize: 10 }}>Each click sends the same request to both systems.</span></div>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: computeToken.textMuted }}>{sent} sent</span>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <button type="button" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onClick={run} style={{ ...controlStyle, gap: 6, padding: "0 14px", fontSize: 13, fontWeight: 500, whiteSpace: "nowrap" }}><Play size={13} fill="currentColor" />Run request</button>
+        {sent > 0 && <button type="button" title="Reset requests" aria-label="Reset requests" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onClick={reset} style={{ ...controlStyle, width: 30 }}><RotateCw size={14} /></button>}
+      </div>
+    </div>
+  )
+}
+
+function RequestTimeline({ requests, now, overloaded = false }: { requests: DemoRequest[]; now: number; overloaded?: boolean }) {
+  return (
+    <div style={{ position: "relative", height: Math.max(46, requests.length * 8 + 12), border: `1px solid ${overloaded ? "#ef2b2d" : "#252525"}`, borderRadius: 8, background: "#111", overflow: "hidden" }}>
+      {requests.length === 0 && <span style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#555", fontFamily: "var(--font-mono)", fontSize: 8.5 }}>idle capacity</span>}
+      {requests.map((request, index) => {
+        const progress = Math.min(Math.max((now - request.startedAt) / request.duration, 0), 1)
+        const traceLeft = 100 - progress * 216
+        return (
+          <span key={request.id} style={{ position: "absolute", top: 7 + index * 8, left: `${traceLeft}%`, width: "116%", height: 5, display: "flex", transition: "left 80ms linear" }}>
+            <i style={{ width: "12.5%", height: "100%", flexShrink: 0, borderRadius: "99px 0 0 99px", background: request.color }} />
+            <i style={{ width: "75%", height: "100%", flexShrink: 0, background: request.color, opacity: 0.3 }} />
+            <i style={{ width: "12.5%", height: "100%", flexShrink: 0, borderRadius: "0 99px 99px 0", background: request.color }} />
+          </span>
+        )
+      })}
+      {overloaded && <span style={{ position: "absolute", inset: 0, background: "repeating-linear-gradient(45deg, transparent 0 20px, rgba(239,43,45,.32) 20px 40px)", pointerEvents: "none" }} />}
+    </div>
+  )
+}
+
+function Ec2View({ el }: { el: CanvasElement }) {
+  const { spend } = useIllustrativeSpend(el.spendStart ?? 12.4, el.spendRatePerSecond ?? 0.45)
+  const requests = useDemoRequests()
+  const [startedAt, setStartedAt] = useState(() => Date.now())
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const reset = () => { const tick = Date.now(); setStartedAt(tick); setNow(tick) }
+    window.addEventListener(RESET_REQUEST_EVENT, reset)
+    return () => window.removeEventListener(RESET_REQUEST_EVENT, reset)
+  }, [])
+  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 80); return () => window.clearInterval(timer) }, [])
+  const usage = (now - startedAt) / 1000
+  const overloaded = requests.length > 3
+  return (
+    <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
+      <header style={{ flexShrink: 0, minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Server</strong><span style={{ fontSize: 9.5, color: "#777" }}>Amazon EC2 · always on</span></div><span style={{ color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>Usage: <b style={{ color: "#ededed", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
+      <div style={{ minHeight: 0, flex: 1, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div aria-label="Two provisioned server towers" style={{ display: "flex", gap: 8 }}>
+          {[0, 1].map((tower) => (
+            <div key={tower} style={{ flex: 1, padding: 6, border: "1px solid #252525", borderRadius: 7, background: "#0a0a0a", display: "flex", flexDirection: "column", gap: 4 }}>
+              {[0, 1].map((unit) => <RackUnit key={unit} accent={overloaded ? "#ef2b2d" : "#3f7fff"} active={requests.length > 0} pulse={requests.length > 0} />)}
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", color: overloaded ? "#ef2b2d" : "#8b8b95", fontSize: 10 }}><span style={{ fontFamily: "var(--font-mono)" }}>vps</span><span style={{ display: "flex", alignItems: "center", gap: 9 }}><span>{overloaded ? "CPU Slow Down" : "CPU Ready"}</span><FluidGlyph count={requests.length} overloaded={overloaded} /><span>{overloaded ? "Overloaded" : "Always on"}</span></span></div>
+        <RequestTimeline requests={requests} now={now} overloaded={overloaded} />
+        <p style={{ margin: "auto 0 0", color: overloaded ? "#ef2b2d" : "#666", fontSize: 9.5, textAlign: "center" }}>{overloaded ? "Capacity exceeded — requests are slowing down." : "One provisioned server handles up to three concurrent requests."}</p>
+      </div>
+      <footer style={{ flexShrink: 0, padding: "11px 16px 13px", borderTop: "1px solid #202020", display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel="one always-on server" /></footer>
+    </div>
+  )
+}
+
+type FluidTrace = DemoRequest & { instance: number }
+
+function FluidGlyph({ count, overloaded = false }: { count: number; overloaded?: boolean }) {
+  const visibleCount = Math.min(count, 4)
+  return (
+    <span aria-label={`${count} active request${count === 1 ? "" : "s"}`} style={{ display: "flex", alignItems: "center", gap: 2 }}>
+      {Array.from({ length: 4 }, (_, bar) => <i key={bar} style={{ width: 2, height: 12, borderRadius: 99, background: bar < visibleCount ? (overloaded ? "#ef2b2d" : "#ededed") : "#444" }} />)}
+    </span>
+  )
+}
+
+const FLUID_BILLING_FRACTION = 116 / 216
+
+function FluidComputeView({ el }: { el: CanvasElement }) {
+  const [traces, setTraces] = useState<FluidTrace[]>([])
+  const [now, setNow] = useState(() => Date.now())
+  const hasActiveRequests = traces.some((trace) => now - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION)
+  const { spend } = useIllustrativeSpend(el.spendStart ?? 3.1, el.spendRatePerSecond ?? 0.14, hasActiveRequests)
+  const [usage, setUsage] = useState(0)
+  const lastTick = useRef(Date.now())
+  useEffect(() => {
+    const receive = (event: Event) => {
+      const request = (event as CustomEvent<DemoRequest>).detail
+      setTraces((current) => {
+        const activeByInstance = new Map<number, number>()
+        current.filter((trace) => request.startedAt - trace.startedAt < trace.duration).forEach((trace) => activeByInstance.set(trace.instance, (activeByInstance.get(trace.instance) ?? 0) + 1))
+        let instance = 0
+        while ((activeByInstance.get(instance) ?? 0) >= 3) instance += 1
+        return [...current.slice(-11), { ...request, instance }]
+      })
+    }
+    const reset = () => {
+      setTraces([])
+      setUsage(0)
+      const tick = Date.now()
+      setNow(tick)
+      lastTick.current = tick
+    }
+    window.addEventListener(REQUEST_EVENT, receive)
+    window.addEventListener(RESET_REQUEST_EVENT, reset)
+    return () => {
+      window.removeEventListener(REQUEST_EVENT, receive)
+      window.removeEventListener(RESET_REQUEST_EVENT, reset)
+    }
+  }, [])
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const tick = Date.now()
+      const elapsed = (tick - lastTick.current) / 1000
+      lastTick.current = tick
+      setNow(tick)
+      const hasActiveWork = traces.some((trace) => tick - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION)
+      if (hasActiveWork) setUsage((current) => current + elapsed)
+      setTraces((current) => current.filter((trace) => tick - trace.startedAt < trace.duration + 500))
+    }, 80)
+    return () => window.clearInterval(timer)
+  }, [traces])
+  const instanceIds = Array.from(new Set(traces.map((trace) => trace.instance))).sort((a, b) => a - b).slice(-3)
+  const anyActive = traces.some((trace) => now - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION)
+  return (
+    <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
+      <header style={{ flexShrink: 0, minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Fluid</strong><span style={{ color: "#777", fontSize: 9.5 }}>Vercel Functions</span></div><span style={{ fontFamily: "var(--font-mono)", color: "#888", fontSize: 10 }}>Usage: <b style={{ color: "#ddd", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
+      <div style={{ minHeight: 0, flex: 1, overflow: "hidden", padding: "12px 0", display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 12 }}>
+        {instanceIds.length === 0 ? <div style={{ margin: "auto", color: "#555", fontFamily: "var(--font-mono)", fontSize: 9 }}>Waiting for requests</div> : instanceIds.map((instance) => {
+          const row = traces.filter((trace) => trace.instance === instance)
+          const latestEnd = Math.max(...row.map((trace) => trace.startedAt + trace.duration))
+          const latestBillingEnd = Math.max(...row.map((trace) => trace.startedAt + trace.duration * FLUID_BILLING_FRACTION))
+          const earliestStart = Math.min(...row.map((trace) => trace.startedAt))
+          const rowUsage = Math.min(Math.max(now - earliestStart, 0), latestBillingEnd - earliestStart) / 1000
+          const openingProgress = Math.min(Math.max((now - earliestStart) / 350, 0), 1)
+          const closingProgress = Math.min(Math.max((now - latestEnd) / 500, 0), 1)
+          const lifecycleOpacity = Math.min(openingProgress, 1 - closingProgress)
+          return (
+            <div key={instance} style={{ flexShrink: 0, padding: "0 14px", display: "flex", flexDirection: "column", gap: 7, opacity: lifecycleOpacity, transform: `translateY(${(1 - openingProgress) * 4 - closingProgress * 4}px)`, transition: "opacity 80ms linear, transform 80ms linear" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ color: "#7d7d86", fontFamily: "var(--font-mono)", fontSize: 10.5 }}>fluid-instance-{instance + 1}</span><span style={{ display: "flex", alignItems: "center", gap: 8 }}><FluidGlyph count={row.filter((trace) => now < trace.startedAt + trace.duration * FLUID_BILLING_FRACTION).length} /><span style={{ width: 32, color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>{rowUsage.toFixed(1)}s</span></span></div>
+              <RequestTimeline requests={row} now={now} />
+            </div>
+          )
+        })}
+      </div>
+      <footer style={{ flexShrink: 0, padding: "11px 16px 13px", borderTop: "1px solid #202020", display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel={anyActive ? "active compute spend" : "spend paused"} /></footer>
     </div>
   )
 }

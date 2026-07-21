@@ -127,7 +127,7 @@ export function ElementEditor({ id }: { id: string }) {
           borderRadius: 10,
           background: theme.bg,
           border: "2px solid #0070f3",
-          boxShadow: "0 8px 24px rgba(0,0,0,0.3)",
+          boxShadow: "none",
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
@@ -157,6 +157,7 @@ export function ElementEditor({ id }: { id: string }) {
         </div>
         <textarea
           ref={textRef}
+          className="wb-scroll-native"
           value={el.text || ""}
           spellCheck={false}
           onChange={(e) => update([id], { text: e.target.value })}
@@ -209,7 +210,7 @@ export function ElementEditor({ id }: { id: string }) {
         borderRadius: el.rounded ? 12 : 2,
         background: el.fill === "transparent" ? "#ffffff" : el.fill,
         border: `2px solid #0070f3`,
-        boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+        boxShadow: "none",
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
@@ -234,6 +235,7 @@ export function ElementEditor({ id }: { id: string }) {
         }}
       />
       <textarea
+        className="wb-scroll-native"
         value={el.text || ""}
         onChange={(e) => update([id], { text: e.target.value })}
         onBlur={commit}
