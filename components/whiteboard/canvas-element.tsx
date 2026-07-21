@@ -1863,7 +1863,7 @@ function RequestDemoView({ el }: { el: CanvasElement }) {
   const run = (event: React.MouseEvent) => {
     event.stopPropagation()
     const id = ++requestSequence
-    const request: DemoRequest = { id, color: REQUEST_COLORS[(id - 1) % REQUEST_COLORS.length], startedAt: Date.now(), duration: 3600 + (id % 3) * 500 }
+    const request: DemoRequest = { id, color: REQUEST_COLORS[(id - 1) % REQUEST_COLORS.length], startedAt: Date.now(), duration: 4600 }
     window.dispatchEvent(new CustomEvent(REQUEST_EVENT, { detail: request }))
     setSent((count) => count + 1)
   }
