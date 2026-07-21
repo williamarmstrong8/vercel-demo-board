@@ -1782,7 +1782,7 @@ function ServerView({ el, phase }: { el: CanvasElement; phase: RunPhase | undefi
   )
 }
 
-function useIllustrativeSpend(start: number, ratePerSecond: number, enabled = true) {
+function useIllustrativeSpend(start: number, ratePerSecond: number, enabled = true, scope?: string) {
   const [spend, setSpend] = useState(start)
   const lastTick = useRef(Date.now())
 
@@ -1793,7 +1793,8 @@ function useIllustrativeSpend(start: number, ratePerSecond: number, enabled = tr
       lastTick.current = now
       if (enabled) setSpend((current) => current + elapsed * ratePerSecond)
     }
-    const reset = () => {
+    const reset = (event: Event) => {
+      if (scope && (event as CustomEvent<DemoReset>).detail.scope !== scope) return
       lastTick.current = Date.now()
       setSpend(0)
     }
@@ -1803,7 +1804,7 @@ function useIllustrativeSpend(start: number, ratePerSecond: number, enabled = tr
       window.clearInterval(timer)
       window.removeEventListener(RESET_REQUEST_EVENT, reset)
     }
-  }, [enabled, ratePerSecond])
+  }, [enabled, ratePerSecond, scope])
 
   return { spend, active: enabled }
 }
@@ -1833,21 +1834,25 @@ function SpendDisplay({ amount, rateLabel }: { amount: number; rateLabel: string
   )
 }
 
-type DemoRequest = { id: number; color: string; startedAt: number; duration: number }
+type DemoRequest = { id: number; color: string; startedAt: number; duration: number; scope: string }
+type DemoReset = { scope: string }
 const REQUEST_EVENT = "v0-compute-demo-request"
 const RESET_REQUEST_EVENT = "v0-compute-demo-reset"
 const REQUEST_COLORS = ["#d946ef", "#14b8a6", "#2563eb", "#f59e0b"]
 const FLUID_WORK_COLORS = ["#5b102b", "#18544d", "#173d78", "#71470b"]
 let requestSequence = 0
 
-function useDemoRequests() {
+function useDemoRequests(scope: string) {
   const [requests, setRequests] = useState<DemoRequest[]>([])
   useEffect(() => {
     const receive = (event: Event) => {
       const request = (event as CustomEvent<DemoRequest>).detail
+      if (request.scope !== scope) return
       setRequests((current) => [...current.slice(-7), request])
     }
-    const reset = () => setRequests([])
+    const reset = (event: Event) => {
+      if ((event as CustomEvent<DemoReset>).detail.scope === scope) setRequests([])
+    }
     window.addEventListener(REQUEST_EVENT, receive)
     window.addEventListener(RESET_REQUEST_EVENT, reset)
     const cleanup = window.setInterval(() => setRequests((current) => current.filter((request) => Date.now() - request.startedAt < request.duration)), 120)
@@ -1856,39 +1861,40 @@ function useDemoRequests() {
       window.removeEventListener(RESET_REQUEST_EVENT, reset)
       window.clearInterval(cleanup)
     }
-  }, [])
+  }, [scope])
   return requests
 }
 
-function dispatchDemoRequest() {
+function dispatchDemoRequest(scope: string) {
   const id = ++requestSequence
-  const request: DemoRequest = { id, color: REQUEST_COLORS[(id - 1) % REQUEST_COLORS.length], startedAt: Date.now(), duration: 4600 }
+  const request: DemoRequest = { id, color: REQUEST_COLORS[(id - 1) % REQUEST_COLORS.length], startedAt: Date.now(), duration: 4600, scope }
   window.dispatchEvent(new CustomEvent(REQUEST_EVENT, { detail: request }))
 }
 
 const requestControlStyle: React.CSSProperties = { pointerEvents: "auto", display: "inline-flex", alignItems: "center", justifyContent: "center", height: 30, borderRadius: 9999, border: "1px solid rgba(255,255,255,0.14)", background: "#000000", color: "#ffffff", fontFamily: "var(--font-sans)", cursor: "pointer", boxShadow: "none" }
 
-function RunRequestButton() {
-  return <button type="button" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); dispatchDemoRequest() }} style={{ ...requestControlStyle, gap: 6, padding: "0 14px", fontSize: 13, fontWeight: 500, whiteSpace: "nowrap" }}><Play size={13} fill="currentColor" />Run request</button>
+function RunRequestButton({ scope }: { scope: string }) {
+  return <button type="button" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); dispatchDemoRequest(scope) }} style={{ ...requestControlStyle, gap: 6, padding: "0 14px", fontSize: 13, fontWeight: 500, whiteSpace: "nowrap" }}><Play size={13} fill="currentColor" />Run request</button>
 }
 
 function ComputeCardShell({ el, children }: { el: CanvasElement; children: React.ReactNode }) {
   const showControl = el.showRequestButton !== false
-  return <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: showControl ? 10 : 0 }}>{<div style={{ width: "100%", minHeight: 0, flex: 1 }}>{children}</div>}{showControl && <RunRequestButton />}</div>
+  return <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: showControl ? 10 : 0 }}>{<div style={{ width: "100%", minHeight: 0, flex: 1 }}>{children}</div>}{showControl && <RunRequestButton scope={el.requestScope ?? el.id} />}</div>
 }
 
 function RequestDemoView({ el }: { el: CanvasElement }) {
   const [sent, setSent] = useState(0)
+  const scope = el.requestScope ?? el.id
   const run = (event: React.MouseEvent) => {
     event.stopPropagation()
-    dispatchDemoRequest()
+    dispatchDemoRequest(scope)
     setSent((count) => count + 1)
   }
   const reset = (event: React.MouseEvent) => {
     event.stopPropagation()
     requestSequence = 0
     setSent(0)
-    window.dispatchEvent(new Event(RESET_REQUEST_EVENT))
+    window.dispatchEvent(new CustomEvent<DemoReset>(RESET_REQUEST_EVENT, { detail: { scope } }))
   }
   return (
     <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, fontFamily: "var(--font-sans)" }}>
@@ -1926,15 +1932,19 @@ function RequestTimeline({ requests, now, overloaded = false }: { requests: Demo
 }
 
 function Ec2View({ el }: { el: CanvasElement }) {
-  const { spend } = useIllustrativeSpend(el.spendStart ?? 12.4, el.spendRatePerSecond ?? 0.45)
-  const requests = useDemoRequests()
+  const scope = el.requestScope ?? el.id
+  const { spend } = useIllustrativeSpend(el.spendStart ?? 12.4, el.spendRatePerSecond ?? 0.45, true, scope)
+  const requests = useDemoRequests(scope)
   const [startedAt, setStartedAt] = useState(() => Date.now())
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
-    const reset = () => { const tick = Date.now(); setStartedAt(tick); setNow(tick) }
+    const reset = (event: Event) => {
+      if ((event as CustomEvent<DemoReset>).detail.scope !== scope) return
+      const tick = Date.now(); setStartedAt(tick); setNow(tick)
+    }
     window.addEventListener(RESET_REQUEST_EVENT, reset)
     return () => window.removeEventListener(RESET_REQUEST_EVENT, reset)
-  }, [])
+  }, [scope])
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 80); return () => window.clearInterval(timer) }, [])
   const usage = (now - startedAt) / 1000
   const overloaded = requests.length > 3
@@ -1974,15 +1984,17 @@ function FluidGlyph({ count, overloaded = false }: { count: number; overloaded?:
 const FLUID_BILLING_FRACTION = 116 / 216
 
 function FluidComputeView({ el }: { el: CanvasElement }) {
+  const scope = el.requestScope ?? el.id
   const [traces, setTraces] = useState<FluidTrace[]>([])
   const [now, setNow] = useState(() => Date.now())
   const hasActiveRequests = traces.some((trace) => now - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION)
-  const { spend } = useIllustrativeSpend(el.spendStart ?? 3.1, el.spendRatePerSecond ?? 0.14, hasActiveRequests)
+  const { spend } = useIllustrativeSpend(el.spendStart ?? 3.1, el.spendRatePerSecond ?? 0.14, hasActiveRequests, scope)
   const [usage, setUsage] = useState(0)
   const lastTick = useRef(Date.now())
   useEffect(() => {
     const receive = (event: Event) => {
       const request = (event as CustomEvent<DemoRequest>).detail
+      if (request.scope !== scope) return
       setTraces((current) => {
         const activeByInstance = new Map<number, number>()
         current.filter((trace) => request.startedAt - trace.startedAt < trace.duration).forEach((trace) => activeByInstance.set(trace.instance, (activeByInstance.get(trace.instance) ?? 0) + 1))
@@ -1991,7 +2003,8 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
         return [...current.slice(-11), { ...request, instance }]
       })
     }
-    const reset = () => {
+    const reset = (event: Event) => {
+      if ((event as CustomEvent<DemoReset>).detail.scope !== scope) return
       setTraces([])
       setUsage(0)
       const tick = Date.now()
@@ -2004,7 +2017,7 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
       window.removeEventListener(REQUEST_EVENT, receive)
       window.removeEventListener(RESET_REQUEST_EVENT, reset)
     }
-  }, [])
+  }, [scope])
   useEffect(() => {
     const timer = window.setInterval(() => {
       const tick = Date.now()
@@ -2048,18 +2061,21 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
 }
 
 function ServerlessComputeView({ el }: { el: CanvasElement }) {
+  const scope = el.requestScope ?? el.id
   const [traces, setTraces] = useState<FluidTrace[]>([])
   const [now, setNow] = useState(() => Date.now())
   const hasActiveRequests = traces.some((trace) => now - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION)
-  const { spend } = useIllustrativeSpend(el.spendStart ?? 0, el.spendRatePerSecond ?? 0.14, hasActiveRequests)
+  const { spend } = useIllustrativeSpend(el.spendStart ?? 0, el.spendRatePerSecond ?? 0.14, hasActiveRequests, scope)
   const [usage, setUsage] = useState(0)
   const lastTick = useRef(Date.now())
   useEffect(() => {
     const receive = (event: Event) => {
       const request = (event as CustomEvent<DemoRequest>).detail
+      if (request.scope !== scope) return
       setTraces((current) => [...current.slice(-11), { ...request, instance: request.id }])
     }
-    const reset = () => {
+    const reset = (event: Event) => {
+      if ((event as CustomEvent<DemoReset>).detail.scope !== scope) return
       setTraces([])
       setUsage(0)
       const tick = Date.now()
@@ -2072,7 +2088,7 @@ function ServerlessComputeView({ el }: { el: CanvasElement }) {
       window.removeEventListener(REQUEST_EVENT, receive)
       window.removeEventListener(RESET_REQUEST_EVENT, reset)
     }
-  }, [])
+  }, [scope])
   useEffect(() => {
     const timer = window.setInterval(() => {
       const tick = Date.now()

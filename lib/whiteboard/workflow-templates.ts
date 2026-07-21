@@ -181,12 +181,14 @@ export function instantiateTemplate(t: WorkflowTemplate): {
   connections: Connection[]
 } {
   const idMap = new Map<string, string>()
+  const requestScope = uid()
+  const computeDemoTypes: ElementType[] = ["requestdemo", "ec2", "fluidcompute", "serverlesscompute"]
   const elements = t.nodes.map((n) => {
     // Workflow nodes are always drawable element types (never the auto-spawned
     // "sandbox"), so this narrowing to Tool is safe.
     const el = createElement(n.type as Tool, n.x, n.y, STYLE)
     idMap.set(n.ref, el.id)
-    return { ...el, ...n.overrides }
+    return { ...el, ...n.overrides, ...(computeDemoTypes.includes(n.type) ? { requestScope } : {}) }
   })
   const connections: Connection[] = t.connections.map(([from, to]) => ({
     id: uid(),
