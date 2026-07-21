@@ -1917,9 +1917,9 @@ function RequestDemoView({ el }: { el: CanvasElement }) {
   )
 }
 
-function RequestTimeline({ requests, now, overloaded = false }: { requests: DemoRequest[]; now: number; overloaded?: boolean }) {
+function RequestTimeline({ requests, now, overloaded = false, compact = false }: { requests: DemoRequest[]; now: number; overloaded?: boolean; compact?: boolean }) {
   return (
-    <div style={{ position: "relative", height: Math.max(46, requests.length * 8 + 12), border: `1px solid ${overloaded ? "#ef2b2d" : "#252525"}`, borderRadius: 8, background: "#111", overflow: "hidden" }}>
+  <div style={{ position: "relative", height: compact ? 28 : Math.max(46, requests.length * 8 + 12), border: `1px solid ${overloaded ? "#ef2b2d" : "#252525"}`, borderRadius: 8, background: "#111", overflow: "hidden" }}>
       {requests.length === 0 && <span style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#555", fontFamily: "var(--font-mono)", fontSize: 8.5 }}>idle capacity</span>}
       {requests.map((request, index) => {
         const progress = Math.min(Math.max((now - request.startedAt) / request.duration, 0), 1)
@@ -1959,13 +1959,13 @@ function Ec2View({ el }: { el: CanvasElement }) {
     <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
       <header style={{ flexShrink: 0, minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Server</strong><span style={{ fontSize: 9.5, color: "#777" }}>Amazon EC2 · always on</span></div><span style={{ color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>Usage: <b style={{ color: "#ededed", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
       <div style={{ minHeight: 0, flex: 1, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-        <div aria-label="Two provisioned server towers" style={{ display: "flex", gap: 8 }}>
+        {el.showServerTowers !== false && <div aria-label="Two provisioned server towers" style={{ display: "flex", gap: 8 }}>
           {[0, 1].map((tower) => (
             <div key={tower} style={{ flex: 1, padding: 6, border: "1px solid #252525", borderRadius: 7, background: "#0a0a0a", display: "flex", flexDirection: "column", gap: 4 }}>
               {[0, 1].map((unit) => <RackUnit key={unit} accent={overloaded ? "#ef2b2d" : "#3f7fff"} active={requests.length > 0} pulse={requests.length > 0} />)}
             </div>
           ))}
-        </div>
+        </div>}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", color: overloaded ? "#ef2b2d" : "#8b8b95", fontSize: 10 }}><span style={{ fontFamily: "var(--font-mono)" }}>vps</span><span style={{ display: "flex", alignItems: "center", gap: 9 }}><span>{overloaded ? "CPU Slow Down" : "CPU Ready"}</span><FluidGlyph count={requests.length} overloaded={overloaded} /><span>{overloaded ? "Overloaded" : "Always on"}</span></span></div>
         <RequestTimeline requests={requests} now={now} overloaded={overloaded} />
         <p style={{ margin: "auto 0 0", color: overloaded ? "#ef2b2d" : "#666", fontSize: 9.5, textAlign: "center" }}>{overloaded ? "Capacity exceeded — requests are slowing down." : "One provisioned server handles up to three concurrent requests."}</p>
@@ -2136,7 +2136,7 @@ function ServerlessComputeView({ el }: { el: CanvasElement }) {
           return (
             <div key={trace.id} style={{ flexShrink: 0, padding: "0 14px", display: "flex", flexDirection: "column", gap: 4, opacity: lifecycleOpacity, transform: `translateY(${(1 - openingProgress) * 4 - closingProgress * 4}px)`, transition: "opacity 80ms linear, transform 80ms linear" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ color: "#7d7d86", fontFamily: "var(--font-mono)", fontSize: 10.5 }}>serverless-instance-{trace.instance}</span><span style={{ display: "flex", alignItems: "center", gap: 8 }}><FluidGlyph count={active ? 1 : 0} /><span style={{ width: 32, color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>{rowUsage.toFixed(1)}s</span></span></div>
-              <RequestTimeline requests={[trace]} now={now} />
+              <RequestTimeline requests={[trace]} now={now} compact />
             </div>
           )
         })}
@@ -2168,7 +2168,7 @@ function ComputeComparisonView({ el }: { el: CanvasElement }) {
   const sectionElements: Record<ComparisonKind, CanvasElement> = {
     fluid: { ...el, id: `${el.id}:fluid`, type: "fluidcompute", requestScope: scopes.fluid, showRequestButton: false, showPricing: false, rounded: false },
     serverless: { ...el, id: `${el.id}:serverless`, type: "serverlesscompute", requestScope: scopes.serverless, showRequestButton: false, showPricing: false, rounded: false },
-    server: { ...el, id: `${el.id}:server`, type: "ec2", requestScope: scopes.server, showRequestButton: false, showPricing: false, rounded: false },
+    server: { ...el, id: `${el.id}:server`, type: "ec2", requestScope: scopes.server, showRequestButton: false, showPricing: false, showServerTowers: false, rounded: false },
   }
   const sendRequest = (event: React.MouseEvent) => {
     event.stopPropagation()
@@ -2190,7 +2190,7 @@ function ComputeComparisonView({ el }: { el: CanvasElement }) {
       </header>
       <div style={{ minHeight: 0, flex: 1, display: "flex", flexDirection: "column" }}>
         {enabled.fluid && <div style={{ minHeight: 220, flex: 1, overflow: "hidden" }}><FluidComputeView el={sectionElements.fluid} /></div>}
-        {enabled.serverless && <div style={{ height: 210, flexShrink: 0, overflow: "hidden" }}><ServerlessComputeView el={sectionElements.serverless} /></div>}
+        {enabled.serverless && <div style={{ minHeight: 220, flex: 1, overflow: "hidden" }}><ServerlessComputeView el={sectionElements.serverless} /></div>}
         {enabled.server && <div style={{ minHeight: 220, flex: 1, overflow: "hidden" }}><Ec2View el={sectionElements.server} /></div>}
       </div>
     </div>

@@ -132,6 +132,7 @@ export interface CanvasElement {
   activeDutyCycle?: number
   showRequestButton?: boolean
   showPricing?: boolean
+  showServerTowers?: boolean
   requestScope?: string
   // sandbox terminal block (auto-spawned when the agent runs shell commands)
   sandboxParent?: string // id of the channel UI whose session this mirrors
