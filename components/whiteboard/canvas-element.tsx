@@ -1785,16 +1785,17 @@ function ServerView({ el, phase }: { el: CanvasElement; phase: RunPhase | undefi
   )
 }
 
-function useIllustrativeSpend(start: number, ratePerSecond: number, enabled = true, scope?: string) {
+function useIllustrativeSpend(start: number, ratePerSecond: number, activity: boolean | number = true, scope?: string) {
   const [spend, setSpend] = useState(start)
   const lastTick = useRef(Date.now())
+  const activeInstances = typeof activity === "number" ? activity : activity ? 1 : 0
 
   useEffect(() => {
     const tick = () => {
       const now = Date.now()
       const elapsed = (now - lastTick.current) / 1000
       lastTick.current = now
-      if (enabled) setSpend((current) => current + elapsed * ratePerSecond)
+      if (activeInstances > 0) setSpend((current) => current + elapsed * ratePerSecond * activeInstances)
     }
     const reset = (event: Event) => {
       if (scope && (event as CustomEvent<DemoReset>).detail.scope !== scope) return
@@ -1807,9 +1808,9 @@ function useIllustrativeSpend(start: number, ratePerSecond: number, enabled = tr
       window.clearInterval(timer)
       window.removeEventListener(RESET_REQUEST_EVENT, reset)
     }
-  }, [enabled, ratePerSecond, scope])
+  }, [activeInstances, ratePerSecond, scope])
 
-  return { spend, active: enabled }
+  return { spend, active: activeInstances > 0 }
 }
 
 const computeToken = {
@@ -1990,8 +1991,12 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
   const scope = el.requestScope ?? el.id
   const [traces, setTraces] = useState<FluidTrace[]>([])
   const [now, setNow] = useState(() => Date.now())
-  const hasActiveRequests = traces.some((trace) => now - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION)
-  const { spend } = useIllustrativeSpend(el.spendStart ?? 3.1, el.spendRatePerSecond ?? 0.14, hasActiveRequests, scope)
+  const activeInstanceCount = new Set(
+    traces
+      .filter((trace) => now - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION)
+      .map((trace) => trace.instance),
+  ).size
+  const { spend } = useIllustrativeSpend(el.spendStart ?? 3.1, el.spendRatePerSecond ?? 0.14, activeInstanceCount, scope)
   const [usage, setUsage] = useState(0)
   const lastTick = useRef(Date.now())
   useEffect(() => {
@@ -2027,14 +2032,18 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
       const elapsed = (tick - lastTick.current) / 1000
       lastTick.current = tick
       setNow(tick)
-      const hasActiveWork = traces.some((trace) => tick - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION)
-      if (hasActiveWork) setUsage((current) => current + elapsed)
+      const activeInstances = new Set(
+        traces
+          .filter((trace) => tick - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION)
+          .map((trace) => trace.instance),
+      ).size
+      if (activeInstances > 0) setUsage((current) => current + elapsed * activeInstances)
       setTraces((current) => current.filter((trace) => tick - trace.startedAt < trace.duration + 500))
     }, 80)
     return () => window.clearInterval(timer)
   }, [traces])
   const instanceIds = Array.from(new Set(traces.map((trace) => trace.instance))).sort((a, b) => a - b).slice(-3)
-  const anyActive = traces.some((trace) => now - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION)
+  const anyActive = activeInstanceCount > 0
   return (
     <ComputeCardShell el={el}>
     <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
@@ -2067,8 +2076,10 @@ function ServerlessComputeView({ el }: { el: CanvasElement }) {
   const scope = el.requestScope ?? el.id
   const [traces, setTraces] = useState<FluidTrace[]>([])
   const [now, setNow] = useState(() => Date.now())
-  const hasActiveRequests = traces.some((trace) => now - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION)
-  const { spend } = useIllustrativeSpend(el.spendStart ?? 0, el.spendRatePerSecond ?? 0.14, hasActiveRequests, scope)
+  const activeInstanceCount = traces.filter(
+    (trace) => now - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION,
+  ).length
+  const { spend } = useIllustrativeSpend(el.spendStart ?? 0, el.spendRatePerSecond ?? 0.14, activeInstanceCount, scope)
   const [usage, setUsage] = useState(0)
   const lastTick = useRef(Date.now())
   useEffect(() => {
@@ -2098,7 +2109,10 @@ function ServerlessComputeView({ el }: { el: CanvasElement }) {
       const elapsed = (tick - lastTick.current) / 1000
       lastTick.current = tick
       setNow(tick)
-      if (traces.some((trace) => tick - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION)) setUsage((current) => current + elapsed)
+      const activeInstances = traces.filter(
+        (trace) => tick - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION,
+      ).length
+      if (activeInstances > 0) setUsage((current) => current + elapsed * activeInstances)
       setTraces((current) => current.filter((trace) => tick - trace.startedAt < trace.duration + 500))
     }, 80)
     return () => window.clearInterval(timer)
@@ -2125,7 +2139,7 @@ function ServerlessComputeView({ el }: { el: CanvasElement }) {
           )
         })}
       </div>
-      <footer style={{ flexShrink: 0, padding: "11px 16px 13px", borderTop: "1px solid #202020", display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel={hasActiveRequests ? "active compute spend" : "spend paused"} /></footer>
+      <footer style={{ flexShrink: 0, padding: "11px 16px 13px", borderTop: "1px solid #202020", display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel={activeInstanceCount > 0 ? "active compute spend" : "spend paused"} /></footer>
     </div>
     </ComputeCardShell>
   )
