@@ -1,7 +1,7 @@
 "use client"
 
 import { memo, useState, useLayoutEffect, useEffect, useRef, useMemo } from "react"
-import { Play, Loader2, Check, RotateCw, Lock, ChevronDown, ChevronRight, Folder, FileText, SquareTerminal, ExternalLink, Waypoints, Server, Send } from "lucide-react"
+import { Play, Loader2, Check, RotateCw, Lock, ChevronDown, ChevronRight, Folder, FileText, SquareTerminal, ExternalLink, Waypoints, Server, Send, Cpu, Zap, HardDrive } from "lucide-react"
 import type { AgentFile, CanvasElement, RunPhase } from "@/lib/whiteboard/types"
 import { getBounds } from "@/lib/whiteboard/geometry"
 import { getCodeTheme, tokenizeLine } from "@/lib/whiteboard/code-themes"
@@ -822,6 +822,8 @@ function renderContent(el: CanvasElement, b: { width: number; height: number }, 
   return <FluidComputeView el={el} />
   case "serverlesscompute":
   return <ServerlessComputeView el={el} />
+  case "computecomparison":
+  return <ComputeComparisonView el={el} />
   case "requestdemo":
   return <RequestDemoView el={el} />
   case "image":
@@ -2142,6 +2144,99 @@ function ServerlessComputeView({ el }: { el: CanvasElement }) {
       <footer style={{ flexShrink: 0, padding: "11px 16px 13px", borderTop: "1px solid #202020", display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel={activeInstanceCount > 0 ? "active compute spend" : "spend paused"} /></footer>
     </div>
     </ComputeCardShell>
+  )
+}
+
+type ComparisonKind = "fluid" | "serverless" | "server"
+
+type ComparisonSectionProps = {
+  kind: ComparisonKind
+  requests: DemoRequest[]
+  now: number
+  usage: number
+  spend: number
+}
+
+function ComparisonSection({ kind, requests, now, usage, spend }: ComparisonSectionProps) {
+  const isServer = kind === "server"
+  const label = kind === "fluid" ? "Fluid" : kind === "serverless" ? "Serverless" : "Server"
+  const subtitle = kind === "fluid" ? "Pooled concurrent requests" : kind === "serverless" ? "One request per instance" : "Always-on server"
+  const activeRequests = requests.filter((request) => now - request.startedAt < request.duration * FLUID_BILLING_FRACTION)
+  const icon = kind === "fluid" ? <Cpu size={15} /> : kind === "serverless" ? <Zap size={15} /> : <HardDrive size={15} />
+  return (
+    <section style={{ minHeight: 0, flex: 1, display: "flex", flexDirection: "column", borderTop: "1px solid #242424", background: "#050505", overflow: "hidden" }}>
+      <header style={{ flexShrink: 0, padding: "11px 16px 8px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 9 }}><span style={{ color: "#ededed", display: "flex" }}>{icon}</span><div style={{ display: "flex", flexDirection: "column", gap: 1 }}><strong style={{ fontSize: 13, fontWeight: 500 }}>{label}</strong><span style={{ color: "#737373", fontSize: 8.5 }}>{subtitle}</span></div></div>
+        <span style={{ color: "#858585", fontFamily: "var(--font-mono)", fontSize: 9.5 }}>Usage: <b style={{ color: "#ededed", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span>
+      </header>
+      <div style={{ minHeight: 0, flex: 1, padding: "7px 16px 9px", display: "flex", flexDirection: "column", justifyContent: "center", gap: 8 }}>
+        {isServer ? <><div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", color: "#888", fontFamily: "var(--font-mono)", fontSize: 9 }}><span>server-01</span><span style={{ display: "flex", alignItems: "center", gap: 5 }}><FluidGlyph count={1} />Always on</span></div><RequestTimeline requests={requests} now={now} /></> : activeRequests.length === 0 ? <div style={{ color: "#4f4f4f", fontFamily: "var(--font-mono)", fontSize: 8.5, textAlign: "center" }}>Waiting for requests</div> : kind === "fluid" ? <><div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", color: "#858585", fontFamily: "var(--font-mono)", fontSize: 9 }}><span>fluid-instance-1</span><FluidGlyph count={1} /></div><RequestTimeline requests={activeRequests} now={now} /></> : activeRequests.slice(-3).map((request) => <div key={request.id} style={{ display: "flex", alignItems: "center", gap: 10 }}><span style={{ width: 92, color: "#777", fontFamily: "var(--font-mono)", fontSize: 8 }}>instance-{request.id}</span><div style={{ minWidth: 0, flex: 1 }}><RequestTimeline requests={[request]} now={now} /></div></div>)}
+      </div>
+      <footer style={{ flexShrink: 0, padding: "7px 16px 9px", borderTop: "1px solid #1d1d1d", display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel={isServer || activeRequests.length > 0 ? "compute spend" : "spend paused"} /></footer>
+    </section>
+  )
+}
+
+function ComputeComparisonView({ el }: { el: CanvasElement }) {
+  const scope = el.requestScope ?? el.id
+  const [enabled, setEnabled] = useState<Record<ComparisonKind, boolean>>({ fluid: true, serverless: true, server: true })
+  const [requestsByKind, setRequestsByKind] = useState<Record<ComparisonKind, DemoRequest[]>>({ fluid: [], serverless: [], server: [] })
+  const [usage, setUsage] = useState<Record<ComparisonKind, number>>({ fluid: 0, serverless: 0, server: 0 })
+  const [spend, setSpend] = useState<Record<ComparisonKind, number>>({ fluid: 0, serverless: 0, server: 0 })
+  const [now, setNow] = useState(() => Date.now())
+  const lastTick = useRef(Date.now())
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const tick = Date.now()
+      const elapsed = (tick - lastTick.current) / 1000
+      lastTick.current = tick
+      setNow(tick)
+      setUsage((current) => {
+        const next = { ...current }
+        if (enabled.server) next.server += elapsed
+        if (enabled.fluid && requestsByKind.fluid.some((request) => tick - request.startedAt < request.duration * FLUID_BILLING_FRACTION)) next.fluid += elapsed
+        if (enabled.serverless) next.serverless += elapsed * requestsByKind.serverless.filter((request) => tick - request.startedAt < request.duration * FLUID_BILLING_FRACTION).length
+        return next
+      })
+      setSpend((current) => {
+        const next = { ...current }
+        if (enabled.server) next.server += elapsed * 0.45
+        if (enabled.fluid && requestsByKind.fluid.some((request) => tick - request.startedAt < request.duration * FLUID_BILLING_FRACTION)) next.fluid += elapsed * 0.14
+        if (enabled.serverless) next.serverless += elapsed * 0.14 * requestsByKind.serverless.filter((request) => tick - request.startedAt < request.duration * FLUID_BILLING_FRACTION).length
+        return next
+      })
+      setRequestsByKind((current) => ({
+        fluid: current.fluid.filter((request) => tick - request.startedAt < request.duration),
+        serverless: current.serverless.filter((request) => tick - request.startedAt < request.duration * FLUID_BILLING_FRACTION + 500),
+        server: current.server.filter((request) => tick - request.startedAt < request.duration),
+      }))
+    }, 80)
+    return () => window.clearInterval(timer)
+  }, [enabled, requestsByKind])
+
+  const sendRequest = (event: React.MouseEvent) => {
+    event.stopPropagation()
+    const id = ++requestSequence
+    const request: DemoRequest = { id, color: REQUEST_COLORS[(id - 1) % REQUEST_COLORS.length], startedAt: Date.now(), duration: 4600, scope }
+    setRequestsByKind((current) => ({
+      fluid: enabled.fluid ? [...current.fluid.slice(-7), request] : current.fluid,
+      serverless: enabled.serverless ? [...current.serverless.slice(-7), request] : current.serverless,
+      server: enabled.server ? [...current.server.slice(-7), request] : current.server,
+    }))
+  }
+  const toggle = (kind: ComparisonKind) => (event: React.ChangeEvent<HTMLInputElement>) => {
+    event.stopPropagation()
+    setEnabled((current) => ({ ...current, [kind]: event.target.checked }))
+  }
+  return (
+    <div style={{ width: "100%", height: "100%", border: "1px solid #2a2a2a", borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
+      <header style={{ flexShrink: 0, minHeight: 58, padding: "11px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, background: "#080808" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>{(["fluid", "serverless", "server"] as ComparisonKind[]).map((kind) => <label key={kind} onPointerDown={(event) => event.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 11.5 }}><input type="checkbox" checked={enabled[kind]} onChange={toggle(kind)} style={{ width: 14, height: 14, accentColor: "#ededed" }} />{kind === "fluid" ? "Fluid" : kind === "serverless" ? "Serverless" : "Server"}</label>)}</div>
+        <button type="button" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onClick={sendRequest} style={{ ...requestControlStyle, height: 32, gap: 7, padding: "0 14px", background: "#ededed", color: "#111", fontSize: 11.5, fontWeight: 500 }}><Zap size={14} />Send Request</button>
+      </header>
+      <div style={{ minHeight: 0, flex: 1, display: "flex", flexDirection: "column" }}>{(["fluid", "serverless", "server"] as ComparisonKind[]).filter((kind) => enabled[kind]).map((kind) => <ComparisonSection key={kind} kind={kind} requests={requestsByKind[kind]} now={now} usage={usage[kind]} spend={spend[kind]} />)}</div>
+    </div>
   )
 }
 

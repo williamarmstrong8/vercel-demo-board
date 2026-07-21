@@ -182,6 +182,20 @@ export function createElement(
         strokeWidth: 1,
         rounded: true,
       }
+    case "computecomparison":
+      return {
+        ...base,
+        type: "computecomparison",
+        width: 560,
+        height: 760,
+        title: "Compute comparison",
+        spendRatePerSecond: 0.14,
+        requestScope: base.id,
+        fill: "#0a0a0a",
+        stroke: "#2e2e2e",
+        strokeWidth: 1,
+        rounded: true,
+      }
     case "requestdemo":
       return {
         ...base,

@@ -92,6 +92,13 @@ const ITEMS: LibraryItem[] = [
     keywords: ["functions", "serverless", "compute", "instance", "request", "cost", "spend"],
   },
   {
+    id: "computecomparison",
+    icon: Blocks,
+    label: "Compute comparison",
+    description: "Compare Fluid, Serverless, and Server request usage.",
+    keywords: ["fluid", "serverless", "server", "compute", "comparison", "request", "usage", "cost"],
+  },
+  {
     id: "filetree",
     icon: FolderTree,
     label: "eve agent",
@@ -118,6 +125,7 @@ const NODE_ICONS: Partial<Record<ElementType, React.ComponentType<{ className?: 
   ec2: HardDrive,
   fluidcompute: FunctionSquare,
   serverlesscompute: FunctionSquare,
+  computecomparison: Blocks,
   requestdemo: Send,
 }
 

@@ -19,6 +19,7 @@ export type Tool =
   | "ec2"
   | "fluidcompute"
   | "serverlesscompute"
+  | "computecomparison"
   | "requestdemo"
 
 export type ElementType =
@@ -41,6 +42,7 @@ export type ElementType =
   | "ec2"
   | "fluidcompute"
   | "serverlesscompute"
+  | "computecomparison"
   | "requestdemo"
 
 // A single file inside an eve agent file-tree block. Clicking its row opens the
