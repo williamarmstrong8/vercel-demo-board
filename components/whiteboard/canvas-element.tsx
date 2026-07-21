@@ -2188,7 +2188,7 @@ function ComputeComparisonView({ el }: { el: CanvasElement }) {
   }
   return (
     <div style={{ width: "100%", height: "100%", border: el.showContainerBorder === false ? "none" : `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
-      <header onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} style={{ pointerEvents: "auto", flexShrink: 0, minHeight: 58, padding: "11px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, borderBottom: "1px solid #202020", background: "#080808" }}>
+      <header onDoubleClick={(event) => event.stopPropagation()} style={{ pointerEvents: "auto", flexShrink: 0, minHeight: 58, padding: "11px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, borderBottom: "1px solid #202020", background: "#080808" }}>
         <div style={{ minWidth: 0, display: "flex", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
           {comparisonKinds.map((kind) => <label key={kind} onPointerDown={(event) => event.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 11.5, whiteSpace: "nowrap" }}><input type="checkbox" checked={enabled[kind]} onChange={toggle(kind)} style={{ width: 14, height: 14, accentColor: "#ededed" }} />{kind === "fluid" ? "Fluid" : kind === "serverless" ? "Serverless" : "Server"}</label>)}
         </div>
