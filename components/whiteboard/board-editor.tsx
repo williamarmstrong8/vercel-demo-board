@@ -18,17 +18,73 @@ import { saveBoard } from "@/app/actions/boards"
 import type { BoardSummary } from "@/app/actions/boards"
 import type { Project } from "@/lib/whiteboard/types"
 
+const AUTOSAVE_DELAY = 1000
+
+type PendingSave = {
+  project: Project
+  revision: number
+}
+
 export function BoardEditor({ board }: { board: BoardSummary }) {
   const loadBoard = useWhiteboard((s) => s.loadBoard)
   const [ready, setReady] = useState(false)
-  const [dirty, setDirty] = useState(false)
-  const [saving, setSaving] = useState(false)
   const canEdit = board.canEdit ?? false
+  const revisionRef = useRef(0)
+  const pendingRef = useRef<PendingSave | null>(null)
+  const savingRef = useRef(false)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const flushRef = useRef<() => void>(() => undefined)
 
-  // Mirror `dirty` into a ref so the beforeunload handler always reads the
-  // latest value without re-subscribing.
-  const dirtyRef = useRef(false)
-  dirtyRef.current = dirty
+  const flushAutosave = useCallback(() => {
+    if (!canEdit || savingRef.current || !pendingRef.current) return
+
+    const pending = pendingRef.current
+    pendingRef.current = null
+    savingRef.current = true
+
+    void saveBoard(board.id, {
+      name: pending.project.name,
+      data: {
+        elements: pending.project.elements,
+        connections: pending.project.connections ?? [],
+        camera: pending.project.camera,
+      },
+    })
+      .then(() => {
+        if (revisionRef.current === pending.revision && !pendingRef.current) {
+          clearBoardDraft(board.id)
+        }
+      })
+      .catch(() => {
+        // Keep the local draft as the recovery copy. A later edit or Cmd/Ctrl+S
+        // will retry with the newest board snapshot.
+        if (!pendingRef.current) pendingRef.current = pending
+      })
+      .finally(() => {
+        savingRef.current = false
+        if (pendingRef.current && pendingRef.current.revision > pending.revision) {
+          flushRef.current()
+        }
+      })
+  }, [board.id, canEdit])
+  flushRef.current = flushAutosave
+
+  const queueAutosave = useCallback(
+    (project: Project, immediate = false) => {
+      if (!canEdit) return
+      const revision = revisionRef.current + 1
+      revisionRef.current = revision
+      pendingRef.current = { project, revision }
+
+      if (timerRef.current) clearTimeout(timerRef.current)
+      if (immediate) {
+        flushRef.current()
+      } else {
+        timerRef.current = setTimeout(() => flushRef.current(), AUTOSAVE_DELAY)
+      }
+    },
+    [canEdit],
+  )
 
   useEffect(() => {
     const now = Date.now()
@@ -42,59 +98,34 @@ export function BoardEditor({ board }: { board: BoardSummary }) {
       updatedAt: now,
     }
 
-    // Prefer a local draft (unsaved work from a previous session) over the
-    // cloud copy so a reload / accidental close never loses edits.
+    // Prefer a local recovery draft and immediately queue it for cloud sync.
     const draft = canEdit ? readBoardDraft(board.id) : null
-    loadBoard(draft ?? cloud)
-    setDirty(!!draft)
-
-    if (canEdit) enableCloudDraft(board.id, setDirty)
+    const initial = draft ?? cloud
+    loadBoard(initial)
+    if (canEdit) {
+      enableCloudDraft(board.id, queueAutosave)
+      if (draft) queueAutosave(draft)
+    }
 
     setReady(true)
-    return () => disableCloudDraft()
-  }, [board, canEdit, loadBoard])
-
-  const handleSave = useCallback(() => {
-    if (!canEdit || saving) return
-    const b = useWhiteboard.getState().current()
-    setSaving(true)
-    saveBoard(board.id, {
-      name: b.name,
-      data: {
-        elements: b.elements,
-        connections: b.connections ?? [],
-        camera: b.camera,
-      },
-    })
-      .then(() => {
-        clearBoardDraft(board.id) // also flips dirty -> false via the listener
-        setDirty(false)
-      })
-      .finally(() => setSaving(false))
-  }, [board.id, canEdit, saving])
-
-  // Warn before closing/reloading the tab with unsaved changes.
-  useEffect(() => {
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (!dirtyRef.current) return
-      e.preventDefault()
-      e.returnValue = ""
+    return () => {
+      disableCloudDraft()
+      if (timerRef.current) clearTimeout(timerRef.current)
     }
-    window.addEventListener("beforeunload", onBeforeUnload)
-    return () => window.removeEventListener("beforeunload", onBeforeUnload)
-  }, [])
+  }, [board, canEdit, loadBoard, queueAutosave])
 
-  // Cmd/Ctrl+S saves.
+  // Cmd/Ctrl+S remains an invisible shortcut that flushes the same autosave queue.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
-        e.preventDefault()
-        handleSave()
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault()
+        const current = useWhiteboard.getState().current()
+        queueAutosave(current, true)
       }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [handleSave])
+  }, [queueAutosave])
 
   if (!ready) {
     return (
@@ -111,16 +142,10 @@ export function BoardEditor({ board }: { board: BoardSummary }) {
     <main className="relative h-dvh w-dvw overflow-hidden bg-background">
       <CanvasSurface />
 
-      {/* Top-left: back / board name / save status */}
+      {/* Top-left: back / board name */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between p-3">
         <div className="pointer-events-auto flex items-center gap-2">
-          <BoardTopBar
-            boardId={board.id}
-            canEdit={canEdit}
-            dirty={dirty}
-            saving={saving}
-            onSave={handleSave}
-          />
+          <BoardTopBar boardId={board.id} canEdit={canEdit} />
         </div>
         <div className="pointer-events-auto">
           <ModeToggle />

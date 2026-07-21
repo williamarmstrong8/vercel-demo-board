@@ -52,27 +52,26 @@ function load(): PersistShape | null {
 // --- Persistence adapter --------------------------------------------------
 // Guest mode: the whole multi-project store is mirrored to localStorage.
 //
-// Cloud editing mode (/board/[id]): we deliberately do NOT write to the
-// database on every edit — at Vercel-internal scale that would be a huge,
-// costly volume of writes. Instead each change is mirrored to a lightweight
-// per-board localStorage "draft" (free, instant, survives reloads) and the
-// editor is flagged dirty. The draft is pushed to Neon only when the user
-// explicitly saves (Save button / Cmd+S). A beforeunload guard plus the draft
-// mean unsaved work is never silently lost.
+// Cloud editing mode (/board/[id]): every change is first mirrored to a
+// lightweight per-board localStorage recovery draft. Substantive edits then
+// notify the editor, which debounces and serializes cloud autosaves. Camera-only
+// movement stays local so panning and zooming do not create database writes.
 let cloudBoardId: string | null = null
-let dirtyListener: ((dirty: boolean) => void) | null = null
+let cloudChangeListener: ((project: Project) => void) | null = null
 
 const DRAFT_PREFIX = "canvas:board-draft:"
 const draftKey = (id: string) => `${DRAFT_PREFIX}${id}`
 
-export function enableCloudDraft(boardId: string, onDirtyChange: (dirty: boolean) => void) {
+export function enableCloudDraft(boardId: string, onChange: (project: Project) => void) {
   cloudBoardId = boardId
-  dirtyListener = onDirtyChange
+  cloudChangeListener = onChange
 }
 
 export function disableCloudDraft() {
   cloudBoardId = null
-  dirtyListener = null
+  cloudChangeListener = null
+  if (cloudChangeTimer) clearTimeout(cloudChangeTimer)
+  cloudChangeTimer = null
 }
 
 // The locally-saved working copy for a board, if the user has unsaved edits.
@@ -88,8 +87,7 @@ export function readBoardDraft(id: string): Project | null {
   }
 }
 
-// Called after a successful cloud save (or discard) to clear the draft and
-// mark the editor clean.
+// Called only after the newest revision reaches the cloud successfully.
 export function clearBoardDraft(id: string) {
   if (typeof window === "undefined") return
   try {
@@ -97,17 +95,18 @@ export function clearBoardDraft(id: string) {
   } catch {
     // ignore
   }
-  if (cloudBoardId === id) dirtyListener?.(false)
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
-// `silent` writes the draft without flagging the board dirty — used for camera
-// pan/zoom so merely looking around doesn't trigger the unsaved-changes prompt.
+let cloudChangeTimer: ReturnType<typeof setTimeout> | null = null
+// `silent` keeps camera pan/zoom in the local recovery draft without scheduling
+// a cloud write.
 function persist(state: WhiteboardState, silent = false) {
   if (typeof window === "undefined") return
   if (saveTimer) clearTimeout(saveTimer)
 
-  // Cloud editing: mirror to a per-board draft. No network I/O.
+  // Cloud editing: always refresh the local recovery draft. Substantive edits
+  // also emit the newest board snapshot to the editor's cloud autosave queue.
   if (cloudBoardId) {
     const id = cloudBoardId
     saveTimer = setTimeout(() => {
@@ -118,8 +117,15 @@ function persist(state: WhiteboardState, silent = false) {
       } catch {
         // ignore quota errors
       }
-      if (!silent) dirtyListener?.(true)
     }, 300)
+
+    if (!silent) {
+      if (cloudChangeTimer) clearTimeout(cloudChangeTimer)
+      cloudChangeTimer = setTimeout(() => {
+        const board = state.projects.find((p) => p.id === id) ?? state.projects[0]
+        if (board && cloudBoardId === id) cloudChangeListener?.(board)
+      }, 300)
+    }
     return
   }
 
