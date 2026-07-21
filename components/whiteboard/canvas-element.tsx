@@ -1889,10 +1889,10 @@ function RequestTimeline({ requests, now, overloaded = false }: { requests: Demo
         const waitEnd = 0.82
         const waitProgress = Math.min(Math.max((progress - callEnd) / (waitEnd - callEnd), 0), 1)
         const spinProgress = Math.min(Math.max((progress - waitEnd) / (1 - waitEnd), 0), 1)
-        const traceLeft = 80 - progress * 46
-        const workOpacity = 1 - waitProgress * 0.72
-        const traceOpacity = 1 - spinProgress
-        return <span key={request.id} style={{ position: "absolute", top: 7 + index * 8, left: `${traceLeft}%`, width: "34%", height: 5, opacity: traceOpacity, transition: "left 80ms linear, opacity 80ms linear" }}><i style={{ position: "absolute", inset: 0, borderRadius: 99, background: FLUID_WORK_COLORS[(request.id - 1) % FLUID_WORK_COLORS.length], opacity: 0.38 }} /><i style={{ position: "absolute", left: 0, width: "42%", height: "100%", borderRadius: 99, background: request.color, opacity: workOpacity, transition: "opacity 80ms linear" }} /></span>
+        const traceLeft = 86 - progress * 62
+        const phaseOpacity = progress < callEnd ? 1 : 1 - waitProgress * 0.62
+        const completionOpacity = 1 - spinProgress
+        return <i key={request.id} style={{ position: "absolute", top: 7 + index * 8, left: `${traceLeft}%`, width: "18%", height: 5, borderRadius: 99, background: request.color, opacity: phaseOpacity * completionOpacity, transition: "left 80ms linear, opacity 80ms linear" }} />
       })}
       {overloaded && <span style={{ position: "absolute", inset: 0, background: "repeating-linear-gradient(45deg, transparent 0 20px, rgba(239,43,45,.32) 20px 40px)", pointerEvents: "none" }} />}
     </div>
