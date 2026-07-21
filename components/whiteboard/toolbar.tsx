@@ -104,7 +104,6 @@ export function Toolbar() {
           </button>
         )
       })}
-      <div className="mx-1 h-6 w-px bg-white/10" />
       <button
         onClick={() => fileRef.current?.click()}
         title="Insert image"
@@ -113,6 +112,7 @@ export function Toolbar() {
         <ImageIcon className="size-[18px]" />
       </button>
       <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
+      <div className="mx-1 h-6 w-px bg-white/10" />
       <ComponentLibrary />
     </div>
   )

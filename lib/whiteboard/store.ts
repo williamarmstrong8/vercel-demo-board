@@ -152,9 +152,10 @@ interface WhiteboardState {
   future: CanvasElement[][]
   hydrated: boolean
 
-  // workflow: transient (not persisted)
+  // workflow + placement: transient (not persisted)
   connectingFrom: string | null
   connectPos: { x: number; y: number } | null
+  pendingTemplate: { elements: CanvasElement[]; connections: Connection[] } | null
   runStates: Record<string, RunPhase>
   // page mode: "build" shows all node handles; "prod" hides them unless connected
   mode: "build" | "prod"
@@ -185,6 +186,7 @@ interface WhiteboardState {
   // elements
   addElement: (el: CanvasElement) => void
   addElements: (els: CanvasElement[]) => void
+  setPendingTemplate: (template: { elements: CanvasElement[]; connections: Connection[] } | null) => void
   addTemplate: (elements: CanvasElement[], connections: Connection[]) => void
   removeElements: (ids: string[]) => void
   update: (ids: string[], patch: Partial<CanvasElement>) => void
@@ -274,6 +276,7 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
   hydrated: false,
   connectingFrom: null,
   connectPos: null,
+  pendingTemplate: null,
   runStates: {},
   mode: "build",
 
@@ -366,7 +369,7 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
     persist(get())
   },
 
-  setTool: (tool) => set({ tool }),
+  setTool: (tool) => set({ tool, pendingTemplate: null }),
 
   setCamera: (camera) => {
     set((s) => ({
@@ -419,29 +422,15 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
     persist(get())
   },
 
-  // Drop a pre-wired template (its blocks + connections) into the CURRENT board
-  // as a sequence, rather than creating a whole new board. The incoming block is
-  // offset to sit just below any existing content so it never overlaps, and the
-  // newly added blocks are left selected so the user can immediately reposition
-  // them as a group.
+  setPendingTemplate: (template) => set({ pendingTemplate: template, tool: "select" }),
+
+  // Insert an already-positioned, pre-wired template into the current board.
   addTemplate: (elements, connections) => {
     if (elements.length === 0) return
-    const existing = get().current().elements
-    let dx = 0
-    let dy = 0
-    if (existing.length > 0) {
-      const exMaxY = Math.max(...existing.map((e) => e.y + (e.height ?? 0)))
-      const exMinX = Math.min(...existing.map((e) => e.x))
-      const tplMinY = Math.min(...elements.map((e) => e.y))
-      const tplMinX = Math.min(...elements.map((e) => e.x))
-      dx = exMinX - tplMinX
-      dy = exMaxY + 120 - tplMinY
-    }
-    const placed = elements.map((e) => ({ ...e, x: e.x + dx, y: e.y + dy }))
     get().beginInteraction()
-    set((s) => writeElements(s, [...s.current().elements, ...placed]) as WhiteboardState)
+    set((s) => writeElements(s, [...s.current().elements, ...elements]) as WhiteboardState)
     set((s) => writeConnections(s, [...s.current().connections, ...connections]) as WhiteboardState)
-    set({ selectedIds: placed.map((e) => e.id) })
+    set({ selectedIds: elements.map((e) => e.id), pendingTemplate: null, tool: "select" })
     persist(get())
   },
 
