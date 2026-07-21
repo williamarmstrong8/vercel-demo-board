@@ -1885,12 +1885,12 @@ function RequestTimeline({ requests, now, overloaded = false }: { requests: Demo
       {requests.length === 0 && <span style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#555", fontFamily: "var(--font-mono)", fontSize: 8.5 }}>idle capacity</span>}
       {requests.map((request, index) => {
         const progress = Math.min(Math.max((now - request.startedAt) / request.duration, 0), 1)
-        const traceLeft = 100 - progress * 188
+        const traceLeft = 100 - progress * 216
         return (
-          <span key={request.id} style={{ position: "absolute", top: 7 + index * 8, left: `${traceLeft}%`, width: "88%", height: 5, display: "flex", transition: "left 80ms linear" }}>
-            <i style={{ width: "20%", height: "100%", flexShrink: 0, borderRadius: "99px 0 0 99px", background: request.color }} />
-            <i style={{ width: "60%", height: "100%", flexShrink: 0, background: request.color, opacity: 0.3 }} />
-            <i style={{ width: "20%", height: "100%", flexShrink: 0, borderRadius: "0 99px 99px 0", background: request.color }} />
+          <span key={request.id} style={{ position: "absolute", top: 7 + index * 8, left: `${traceLeft}%`, width: "116%", height: 5, display: "flex", transition: "left 80ms linear" }}>
+            <i style={{ width: "12.5%", height: "100%", flexShrink: 0, borderRadius: "99px 0 0 99px", background: request.color }} />
+            <i style={{ width: "75%", height: "100%", flexShrink: 0, background: request.color, opacity: 0.3 }} />
+            <i style={{ width: "12.5%", height: "100%", flexShrink: 0, borderRadius: "0 99px 99px 0", background: request.color }} />
           </span>
         )
       })}
