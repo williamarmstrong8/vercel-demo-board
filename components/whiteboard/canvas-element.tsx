@@ -1879,26 +1879,18 @@ function RequestDemoView({ el }: { el: CanvasElement }) {
   )
 }
 
-function ServerTower({ requests, index }: { requests: DemoRequest[]; index: number }) {
+function RequestTimeline({ requests, now, overloaded = false }: { requests: DemoRequest[]; now: number; overloaded?: boolean }) {
   return (
-    <div style={{ flex: 1, minWidth: 0, border: "1px solid #333", borderRadius: 8, background: "#0a0a0a", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column" }}>
-      <div style={{ height: 32, padding: "0 9px", borderBottom: "1px solid #292929", background: "#141414", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <strong style={{ fontSize: 9.5 }}>EC2-{index + 1}</strong>
-        <span style={{ display: "flex", alignItems: "center", gap: 4, color: "#8a8a8a", fontSize: 8 }}><i style={{ width: 5, height: 5, borderRadius: 99, background: "#22c55e" }} />Running</span>
-      </div>
-      <div style={{ padding: 8, display: "flex", flexDirection: "column", gap: 5 }}>
-        {[0, 1, 2].map((row) => (
-          <div key={row} style={{ height: 23, border: "1px solid #303030", borderRadius: 4, background: "#111", padding: "0 6px", display: "flex", alignItems: "center", gap: 5 }}>
-            <i style={{ width: 4, height: 4, borderRadius: 99, background: row === 0 ? "#0070f3" : row === 1 ? "#f5a623" : "#22c55e" }} />
-            <i style={{ flex: 1, height: 2, borderRadius: 99, background: "#383838" }} />
-            <i style={{ width: 11, height: 2, borderRadius: 99, background: "#282828" }} />
-          </div>
-        ))}
-      </div>
-      <div style={{ margin: "0 8px 8px", minHeight: 36, border: "1px solid #272727", borderRadius: 4, background: "#050505", padding: 5, display: "flex", flexDirection: "column", gap: 4 }}>
-        {requests.length === 0 ? <span style={{ margin: "auto", color: "#666", fontSize: 8 }}>idle capacity</span> : requests.map((request) => <i key={request.id} style={{ height: 5, width: "100%", borderRadius: 99, background: request.color }} />)}
-      </div>
-      <div style={{ marginTop: "auto", height: 25, padding: "0 8px", borderTop: "1px solid #252525", color: "#777", display: "flex", alignItems: "center", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 7.5 }}><span>2 vCPU</span><span>8 GB</span></div>
+    <div style={{ position: "relative", height: Math.max(46, requests.length * 8 + 12), border: `1px solid ${overloaded ? "#ef2b2d" : "#252525"}`, borderRadius: 8, background: "#111", overflow: "hidden" }}>
+      {requests.length === 0 && <span style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#555", fontFamily: "var(--font-mono)", fontSize: 8.5 }}>idle capacity</span>}
+      {requests.map((request, index) => {
+        const progress = Math.min(Math.max((now - request.startedAt) / request.duration, 0), 1)
+        const right = Math.max(0, 5 - progress * 5)
+        const total = Math.max(8, progress * 86)
+        const work = Math.max(4, Math.min(total, 16 + progress * 19))
+        return <span key={request.id} style={{ position: "absolute", top: 7 + index * 8, right: `${right}%`, width: `${total}%`, height: 5, opacity: 0.95 }}><i style={{ position: "absolute", inset: 0, borderRadius: 99, background: FLUID_WORK_COLORS[(request.id - 1) % FLUID_WORK_COLORS.length], opacity: 0.38 }} /><i style={{ position: "absolute", right: 0, width: `${work}%`, height: "100%", borderRadius: 99, background: request.color }} /></span>
+      })}
+      {overloaded && <span style={{ position: "absolute", inset: 0, background: "repeating-linear-gradient(45deg, transparent 0 20px, rgba(239,43,45,.32) 20px 40px)", pointerEvents: "none" }} />}
     </div>
   )
 }
@@ -1907,19 +1899,19 @@ function Ec2View({ el }: { el: CanvasElement }) {
   const { spend } = useIllustrativeSpend(el.spendStart ?? 12.4, el.spendRatePerSecond ?? 0.0018, "continuous")
   const requests = useDemoRequests()
   const [startedAt] = useState(() => Date.now())
-  const [usage, setUsage] = useState(0)
-  useEffect(() => {
-    const timer = window.setInterval(() => setUsage(((Date.now() - startedAt) / 1000) * 2), 100)
-    return () => window.clearInterval(timer)
-  }, [startedAt])
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 80); return () => window.clearInterval(timer) }, [])
+  const usage = (now - startedAt) / 1000
+  const overloaded = requests.length > 3
   return (
-    <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: computeToken.surface, color: computeToken.text, overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
-      <header style={{ minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${computeToken.border}` }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Amazon EC2</strong><span style={{ fontSize: 9.5, color: computeToken.textMuted }}>Two fixed instances</span></div><span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: computeToken.textMuted }}>Usage: {usage.toFixed(1)}s</span></header>
-      <div style={{ flex: 1, padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-        <div style={{ display: "flex", gap: 9, flex: 1 }}><ServerTower index={0} requests={requests.filter((_, index) => index % 2 === 0)} /><ServerTower index={1} requests={requests.filter((_, index) => index % 2 === 1)} /></div>
-        <p style={{ margin: 0, color: computeToken.textMuted, fontSize: 10, lineHeight: 1.4, textAlign: "center" }}>Requests split across two servers. Both stay provisioned between requests.</p>
+    <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
+      <header style={{ flexShrink: 0, minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", alignItems: "center", gap: 9 }}><span style={{ fontSize: 18 }}>▣</span><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Server</strong><span style={{ fontSize: 9.5, color: "#777" }}>Amazon EC2 · always on</span></div></div><span style={{ color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>Usage: <b style={{ color: "#ededed", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
+      <div style={{ minHeight: 0, flex: 1, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", color: overloaded ? "#ef2b2d" : "#8b8b95", fontSize: 10 }}><span style={{ fontFamily: "var(--font-mono)" }}>vps</span><span style={{ display: "flex", alignItems: "center", gap: 9 }}><span>{overloaded ? "CPU Slow Down" : "CPU Ready"}</span><FluidGlyph active={requests.length > 0} /><span>{overloaded ? "Overloaded" : "Always on"}</span></span></div>
+        <RequestTimeline requests={requests} now={now} overloaded={overloaded} />
+        <p style={{ margin: "auto 0 0", color: overloaded ? "#ef2b2d" : "#666", fontSize: 9.5, textAlign: "center" }}>{overloaded ? "Capacity exceeded — requests are slowing down." : "One provisioned server handles up to three concurrent requests."}</p>
       </div>
-      <footer style={{ padding: "11px 16px 13px", borderTop: `1px solid ${computeToken.border}`, display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel="two always-on servers" /></footer>
+      <footer style={{ flexShrink: 0, padding: "11px 16px 13px", borderTop: "1px solid #202020", display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel="one always-on server" /></footer>
     </div>
   )
 }
@@ -1963,30 +1955,28 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
       setNow(tick)
       const activeCount = traces.filter((trace) => tick - trace.startedAt < trace.duration).length
       if (activeCount) setUsage((current) => current + elapsed * activeCount)
+      setTraces((current) => current.filter((trace) => tick - trace.startedAt < trace.duration))
     }, 80)
     return () => window.clearInterval(timer)
   }, [traces])
-  const instanceIds = Array.from(new Set(traces.map((trace) => trace.instance))).sort((a, b) => a - b)
-  const anyActive = traces.some((trace) => now - trace.startedAt < trace.duration)
+  const instanceIds = Array.from(new Set(traces.map((trace) => trace.instance))).sort((a, b) => a - b).slice(-3)
+  const anyActive = traces.length > 0
   return (
     <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
-      <header style={{ minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 17 }}>▧</span><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Fluid</strong><span style={{ color: "#777", fontSize: 9.5 }}>Vercel Functions</span></div></div><span style={{ fontFamily: "var(--font-mono)", color: "#888", fontSize: 10 }}>Usage: <b style={{ color: "#ddd", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
-      <div style={{ flex: 1, padding: "14px 0", display: "flex", flexDirection: "column", gap: 14 }}>
+      <header style={{ flexShrink: 0, minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 17 }}>▧</span><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Fluid</strong><span style={{ color: "#777", fontSize: 9.5 }}>Vercel Functions</span></div></div><span style={{ fontFamily: "var(--font-mono)", color: "#888", fontSize: 10 }}>Usage: <b style={{ color: "#ddd", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
+      <div style={{ minHeight: 0, flex: 1, overflow: "hidden", padding: "12px 0", display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 12 }}>
         {instanceIds.length === 0 ? <div style={{ margin: "auto", color: "#555", fontFamily: "var(--font-mono)", fontSize: 9 }}>Waiting for requests</div> : instanceIds.map((instance) => {
           const row = traces.filter((trace) => trace.instance === instance)
-          const activeRow = row.filter((trace) => now - trace.startedAt < trace.duration)
           const rowUsage = row.reduce((total, trace) => total + Math.min(Math.max(now - trace.startedAt, 0), trace.duration), 0) / 1000
           return (
-            <div key={instance} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ padding: "0 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ color: "#7d7d86", fontFamily: "var(--font-mono)", fontSize: 10.5 }}>fluid-instance-{instance + 1}</span><span style={{ display: "flex", alignItems: "center", gap: 8 }}><FluidGlyph active={activeRow.length > 0} /><span style={{ width: 32, color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>{rowUsage.toFixed(1)}s</span></span></div>
-              <div style={{ position: "relative", minHeight: Math.max(31, row.length * 7 + 8), background: "#111", borderRadius: "0 7px 7px 0", overflow: "hidden" }}>
-                {row.map((trace, index) => { const progress = Math.min(Math.max((now - trace.startedAt) / trace.duration, 0), 1); const width = Math.max(4, progress * (86 - index * 3)); return <i key={trace.id} style={{ position: "absolute", top: 5 + index * 7, left: `${8 + index * 5}%`, width: `${width}%`, height: 5, borderRadius: 99, background: FLUID_WORK_COLORS[(trace.id - 1) % FLUID_WORK_COLORS.length], opacity: progress === 1 ? 0.72 : 1, transition: "width 80ms linear" }} /> })}
-              </div>
+            <div key={instance} style={{ flexShrink: 0, display: "flex", flexDirection: "column", gap: 7 }}>
+              <div style={{ padding: "0 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ color: "#7d7d86", fontFamily: "var(--font-mono)", fontSize: 10.5 }}>fluid-instance-{instance + 1}</span><span style={{ display: "flex", alignItems: "center", gap: 8 }}><FluidGlyph active /><span style={{ width: 32, color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>{rowUsage.toFixed(1)}s</span></span></div>
+              <RequestTimeline requests={row} now={now} />
             </div>
           )
         })}
       </div>
-      <footer style={{ padding: "11px 16px 13px", borderTop: "1px solid #202020", display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel={anyActive ? "active compute spend" : "spend paused"} /></footer>
+      <footer style={{ flexShrink: 0, padding: "11px 16px 13px", borderTop: "1px solid #202020", display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel={anyActive ? "active compute spend" : "spend paused"} /></footer>
     </div>
   )
 }
