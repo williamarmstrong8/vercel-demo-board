@@ -1809,19 +1809,15 @@ function useIllustrativeSpend(
 }
 
 const computeToken = {
-  surface: "var(--ds-background-100)",
-  surfaceRaised: "var(--ds-background-200)",
-  border: "var(--ds-gray-400)",
-  borderStrong: "var(--ds-gray-500)",
-  text: "var(--ds-gray-1000)",
-  textSecondary: "var(--ds-gray-900)",
-  textMuted: "var(--ds-gray-700)",
-  green: "var(--ds-green-700)",
-  greenBg: "var(--ds-green-100)",
-  amber: "var(--ds-amber-700)",
-  amberBg: "var(--ds-amber-100)",
-  blue: "var(--ds-blue-700)",
-  blueBg: "var(--ds-blue-100)",
+  surface: "var(--card)",
+  surfaceRaised: "var(--muted)",
+  border: "var(--border)",
+  borderStrong: "var(--ring)",
+  text: "var(--card-foreground)",
+  textSecondary: "var(--foreground)",
+  textMuted: "var(--muted-foreground)",
+  green: "oklch(0.62 0.19 145)",
+  greenBg: "oklch(0.96 0.04 145)",
 } as const
 
 function SpendDisplay({ amount, rateLabel }: { amount: number; rateLabel: string }) {
