@@ -1837,121 +1837,75 @@ function SpendDisplay({ amount, rateLabel }: { amount: number; rateLabel: string
   )
 }
 
+function ServerTower() {
+  return (
+    <div style={{ width: 92, height: 128, border: `1px solid ${computeToken.borderStrong}`, borderRadius: 10, background: computeToken.surfaceRaised, padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+      {[0, 1, 2, 3].map((row) => (
+        <div key={row} style={{ flex: 1, border: `1px solid ${computeToken.border}`, borderRadius: 4, padding: "0 6px", display: "flex", alignItems: "center", gap: 5 }}>
+          <i style={{ width: 6, height: 6, borderRadius: 99, background: row === 0 ? computeToken.green : computeToken.textMuted }} />
+          <i style={{ flex: 1, height: 2, borderRadius: 99, background: computeToken.borderStrong }} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function Ec2View({ el }: { el: CanvasElement }) {
   const { spend } = useIllustrativeSpend(el.spendStart ?? 12.4, el.spendRatePerSecond ?? 0.0018, "continuous")
-  const utilization = [18, 22, 17, 24, 20, 19, 31, 23, 21, 26, 18, 22]
-  const details = [
-    ["Instance type", "m7g.large"],
-    ["Compute", "2 vCPU · 8 GiB"],
-    ["Status checks", "2 / 2 passed"],
-  ]
 
   return (
     <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: computeToken.surface, color: computeToken.text, overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
-      <header style={{ minHeight: 76, padding: "12px 16px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, borderBottom: `1px solid ${computeToken.border}` }}>
-        <strong style={{ fontSize: 15, lineHeight: 1.2, textAlign: "center" }}>Amazon EC2</strong>
-        <span style={{ fontSize: 10, color: computeToken.textMuted }}>Provisioned virtual machine</span>
+      <header style={{ minHeight: 72, padding: "12px 16px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, borderBottom: `1px solid ${computeToken.border}` }}>
+        <strong style={{ fontSize: 16, textAlign: "center" }}>Amazon EC2</strong>
+        <span style={{ fontSize: 10, color: computeToken.textMuted }}>One provisioned instance</span>
       </header>
-
-      <div style={{ padding: "13px 15px 10px", display: "flex", flexDirection: "column", gap: 11, flex: 1 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
-          <div style={{ width: 48, height: 58, border: `1px solid ${computeToken.borderStrong}`, borderRadius: 7, background: computeToken.surfaceRaised, display: "flex", flexDirection: "column", padding: 7, gap: 5 }}>
-            {[0, 1, 2].map((row) => (
-              <span key={row} style={{ height: 10, border: `1px solid ${computeToken.border}`, borderRadius: 2, display: "flex", alignItems: "center", padding: "0 3px", gap: 2 }}>
-                <i style={{ width: 3, height: 3, borderRadius: 99, background: row === 0 ? computeToken.green : computeToken.textMuted }} />
-                <i style={{ flex: 1, height: 1, background: computeToken.borderStrong }} />
-              </span>
-            ))}
-          </div>
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 5 }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 550 }}><i style={{ width: 7, height: 7, borderRadius: 99, background: computeToken.green }} />Running</span>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: computeToken.textSecondary }}>i-0e2c7f1a · us-east-1</span>
-            <span style={{ fontSize: 10, color: computeToken.textMuted }}>Capacity remains allocated between requests.</span>
-          </div>
+      <div style={{ flex: 1, padding: 20, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 15 }}>
+        <ServerTower />
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 550 }}>
+          <i style={{ width: 7, height: 7, borderRadius: 99, background: computeToken.green }} />
+          Always running
         </div>
-
-        <div style={{ border: `1px solid ${computeToken.border}`, borderRadius: 7, overflow: "hidden" }}>
-          {details.map(([label, value], index) => (
-            <div key={label} style={{ minHeight: 30, padding: "0 9px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderTop: index ? `1px solid ${computeToken.border}` : "none", fontSize: 9.5 }}>
-              <span style={{ color: computeToken.textMuted }}>{label}</span>
-              <span style={{ fontFamily: "var(--font-mono)", color: label === "Status checks" ? computeToken.green : computeToken.textSecondary }}>{value}</span>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5 }}><span style={{ color: computeToken.textMuted }}>CPU utilization</span><span style={{ fontFamily: "var(--font-mono)", color: computeToken.textSecondary }}>22%</span></div>
-          <div style={{ height: 42, display: "flex", alignItems: "flex-end", gap: 3, borderBottom: `1px solid ${computeToken.border}` }}>
-            {utilization.map((height, index) => <i key={index} style={{ flex: 1, height: `${height}%`, minHeight: 5, background: computeToken.amber, opacity: index > 8 ? 0.75 : 0.45, borderRadius: "2px 2px 0 0" }} />)}
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8.5, color: computeToken.textMuted }}><span>Low utilization</span><span>Billing continues</span></div>
-        </div>
+        <p style={{ margin: 0, maxWidth: 220, color: computeToken.textMuted, fontSize: 11, lineHeight: 1.45, textAlign: "center" }}>The server stays allocated and billing continues, even when no work is running.</p>
       </div>
-
-      <footer style={{ padding: "10px 15px 12px", borderTop: `1px solid ${computeToken.border}`, display: "flex", justifyContent: "center" }}>
-        <SpendDisplay amount={spend} rateLabel="always-on compute spend" />
+      <footer style={{ padding: "13px 16px 15px", borderTop: `1px solid ${computeToken.border}`, display: "flex", justifyContent: "center" }}>
+        <SpendDisplay amount={spend} rateLabel="always-on spend" />
       </footer>
     </div>
   )
 }
 
 function FluidComputeView({ el }: { el: CanvasElement }) {
-  const { spend, active } = useIllustrativeSpend(
-    el.spendStart ?? 3.1,
-    el.spendRatePerSecond ?? 0.00055,
-    "bursts",
-    el.activeDutyCycle ?? 0.42,
-  )
-  const requests = ["checkout", "catalog", "webhook"]
+  const { spend, active } = useIllustrativeSpend(el.spendStart ?? 3.1, el.spendRatePerSecond ?? 0.00055, "bursts", el.activeDutyCycle ?? 0.42)
+  const requests = ["A", "B", "C"]
 
   return (
     <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: computeToken.surface, color: computeToken.text, overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
-      <header style={{ minHeight: 76, padding: "12px 16px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, borderBottom: `1px solid ${computeToken.border}` }}>
-        <strong style={{ fontSize: 15, lineHeight: 1.2, textAlign: "center" }}>Vercel Functions</strong>
+      <header style={{ minHeight: 72, padding: "12px 16px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, borderBottom: `1px solid ${computeToken.border}` }}>
+        <strong style={{ fontSize: 16, textAlign: "center" }}>Vercel Functions</strong>
         <span style={{ fontSize: 10, color: computeToken.textMuted }}>Fluid compute</span>
       </header>
-
-      <div style={{ padding: "13px 15px 10px", display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-          <span style={{ fontSize: 9, color: computeToken.textMuted, textTransform: "uppercase", letterSpacing: "0.08em" }}>Concurrent requests</span>
-          <span style={{ padding: "3px 7px", borderRadius: 99, background: active ? computeToken.greenBg : computeToken.surfaceRaised, color: active ? computeToken.green : computeToken.textMuted, fontSize: 9, fontWeight: 550 }}>{active ? "CPU active" : "CPU paused for I/O"}</span>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "stretch", gap: 10 }}>
-          <div style={{ width: 156, display: "flex", flexDirection: "column", gap: 5 }}>
+      <div style={{ flex: 1, padding: 20, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
             {requests.map((request, index) => (
-              <div key={request} style={{ minHeight: 37, border: `1px solid ${computeToken.border}`, borderRadius: 6, padding: "0 8px", display: "flex", alignItems: "center", gap: 7, background: index < 2 && active ? computeToken.greenBg : computeToken.surfaceRaised }}>
-                <span style={{ fontFamily: "var(--font-mono)", color: index < 2 && active ? computeToken.green : computeToken.textMuted, fontSize: 11 }}>ƒ</span>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, color: computeToken.textSecondary }}>{request}</span>
-                <span style={{ marginLeft: "auto", fontFamily: "var(--font-mono)", fontSize: 8, color: computeToken.textMuted }}>req {index + 1}</span>
+              <div key={request} style={{ width: 72, height: 34, border: `1px solid ${computeToken.border}`, borderRadius: 7, background: active && index < 2 ? computeToken.greenBg : computeToken.surfaceRaised, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "var(--font-mono)", fontSize: 10 }}>
+                <span style={{ color: active && index < 2 ? computeToken.green : computeToken.textMuted }}>ƒ</span>Request {request}
               </div>
             ))}
           </div>
-          <div style={{ display: "flex", alignItems: "center", color: computeToken.textMuted, fontSize: 15 }}>→</div>
-          <div style={{ flex: 1, border: `1px solid ${active ? computeToken.green : computeToken.borderStrong}`, borderRadius: 7, background: active ? computeToken.greenBg : computeToken.surfaceRaised, padding: 9, display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><span style={{ fontSize: 10, fontWeight: 550 }}>Shared instance</span><span style={{ fontFamily: "var(--font-mono)", fontSize: 8.5, color: computeToken.textMuted }}>1 instance</span></div>
-            {requests.map((request, index) => (
-              <div key={request} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 8.5, color: computeToken.textMuted }}>
-                <span style={{ width: 38, fontFamily: "var(--font-mono)" }}>req {index + 1}</span>
-                <span style={{ flex: 1, height: 6, display: "flex", borderRadius: 99, overflow: "hidden", background: computeToken.border }}>
-                  <i style={{ width: index === 2 ? "28%" : "45%", background: active && index < 2 ? computeToken.green : computeToken.blue }} />
-                  <i style={{ flex: 1, background: computeToken.blueBg }} />
-                </span>
-              </div>
-            ))}
-            <div style={{ marginTop: "auto", display: "flex", gap: 10, fontSize: 8, color: computeToken.textMuted }}><span style={{ display: "flex", alignItems: "center", gap: 4 }}><i style={{ width: 7, height: 7, background: computeToken.green, borderRadius: 2 }} />CPU</span><span style={{ display: "flex", alignItems: "center", gap: 4 }}><i style={{ width: 7, height: 7, background: computeToken.blueBg, border: `1px solid ${computeToken.blue}`, borderRadius: 2 }} />I/O wait</span></div>
+          <span style={{ color: computeToken.textMuted, fontSize: 16 }}>→</span>
+          <div style={{ width: 128, height: 116, border: `1px solid ${active ? computeToken.green : computeToken.borderStrong}`, borderRadius: 10, background: active ? computeToken.greenBg : computeToken.surfaceRaised, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }}>
+            <div style={{ display: "flex", gap: 5 }}>
+              {[0, 1, 2].map((slot) => <i key={slot} style={{ width: 24, height: 32, border: `1px solid ${computeToken.borderStrong}`, borderRadius: 4, background: active && slot < 2 ? computeToken.green : computeToken.surface }} />)}
+            </div>
+            <strong style={{ fontSize: 11, textAlign: "center" }}>Shared compute</strong>
+            <span style={{ fontSize: 9, color: active ? computeToken.green : computeToken.textMuted }}>{active ? "Running work" : "Waiting for work"}</span>
           </div>
         </div>
-
-        <div style={{ display: "flex", gap: 6 }}>
-          {[["Active CPU", active ? "billing" : "paused"], ["Memory", "provisioned"], ["Invocations", "3"]].map(([label, value]) => (
-            <div key={label} style={{ flex: 1, border: `1px solid ${computeToken.border}`, borderRadius: 6, padding: "7px 8px", display: "flex", flexDirection: "column", gap: 2 }}><span style={{ fontSize: 8.5, color: computeToken.textMuted }}>{label}</span><span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: label === "Active CPU" ? (active ? computeToken.green : computeToken.blue) : computeToken.textSecondary }}>{value}</span></div>
-          ))}
-        </div>
+        <p style={{ margin: 0, maxWidth: 310, color: computeToken.textMuted, fontSize: 11, lineHeight: 1.45, textAlign: "center" }}>Multiple functions share compute. Spend advances only while work is active.</p>
       </div>
-
-      <footer style={{ padding: "10px 15px 12px", borderTop: `1px solid ${computeToken.border}`, display: "flex", justifyContent: "center" }}>
-        <SpendDisplay amount={spend} rateLabel="active compute spend" />
+      <footer style={{ padding: "13px 16px 15px", borderTop: `1px solid ${computeToken.border}`, display: "flex", justifyContent: "center" }}>
+        <SpendDisplay amount={spend} rateLabel={active ? "active compute spend" : "spend paused"} />
       </footer>
     </div>
   )
