@@ -1780,44 +1780,30 @@ function ServerView({ el, phase }: { el: CanvasElement; phase: RunPhase | undefi
   )
 }
 
-function useIllustrativeSpend(
-  start: number,
-  ratePerSecond: number,
-  mode: "continuous" | "bursts",
-  dutyCycle = 0.42,
-) {
-  const mountedAt = useRef(Date.now())
-  const [baseSpend, setBaseSpend] = useState(start)
-  const [elapsed, setElapsed] = useState(0)
+function useIllustrativeSpend(start: number, ratePerSecond: number, enabled = true) {
+  const [spend, setSpend] = useState(start)
+  const lastTick = useRef(Date.now())
 
   useEffect(() => {
-    const tick = () => setElapsed((Date.now() - mountedAt.current) / 1000)
-    const reset = () => {
-      mountedAt.current = Date.now()
-      setBaseSpend(0)
-      setElapsed(0)
+    const tick = () => {
+      const now = Date.now()
+      const elapsed = (now - lastTick.current) / 1000
+      lastTick.current = now
+      if (enabled) setSpend((current) => current + elapsed * ratePerSecond)
     }
-    tick()
+    const reset = () => {
+      lastTick.current = Date.now()
+      setSpend(0)
+    }
     const timer = window.setInterval(tick, 80)
     window.addEventListener(RESET_REQUEST_EVENT, reset)
     return () => {
       window.clearInterval(timer)
       window.removeEventListener(RESET_REQUEST_EVENT, reset)
     }
-  }, [])
+  }, [enabled, ratePerSecond])
 
-  const cycleSeconds = 4
-  const fullCycles = Math.floor(elapsed / cycleSeconds)
-  const cycleElapsed = elapsed % cycleSeconds
-  const activeSeconds =
-    mode === "continuous"
-      ? elapsed
-      : fullCycles * cycleSeconds * dutyCycle + Math.min(cycleElapsed, cycleSeconds * dutyCycle)
-
-  return {
-    spend: baseSpend + activeSeconds * ratePerSecond,
-    active: mode === "continuous" || cycleElapsed < cycleSeconds * dutyCycle,
-  }
+  return { spend, active: enabled }
 }
 
 const computeToken = {
@@ -1924,7 +1910,7 @@ function RequestTimeline({ requests, now, overloaded = false }: { requests: Demo
 }
 
 function Ec2View({ el }: { el: CanvasElement }) {
-  const { spend } = useIllustrativeSpend(el.spendStart ?? 12.4, el.spendRatePerSecond ?? 0.85, "continuous")
+  const { spend } = useIllustrativeSpend(el.spendStart ?? 12.4, el.spendRatePerSecond ?? 0.45)
   const requests = useDemoRequests()
   const [startedAt, setStartedAt] = useState(() => Date.now())
   const [now, setNow] = useState(() => Date.now())
@@ -1968,9 +1954,10 @@ function FluidGlyph({ count, overloaded = false }: { count: number; overloaded?:
 }
 
 function FluidComputeView({ el }: { el: CanvasElement }) {
-  const { spend } = useIllustrativeSpend(el.spendStart ?? 3.1, el.spendRatePerSecond ?? 0.24, "bursts", el.activeDutyCycle ?? 0.42)
   const [traces, setTraces] = useState<FluidTrace[]>([])
   const [now, setNow] = useState(() => Date.now())
+  const hasActiveRequests = traces.some((trace) => now - trace.startedAt < trace.duration)
+  const { spend } = useIllustrativeSpend(el.spendStart ?? 3.1, el.spendRatePerSecond ?? 0.14, hasActiveRequests)
   const [usage, setUsage] = useState(0)
   const lastTick = useRef(Date.now())
   useEffect(() => {
