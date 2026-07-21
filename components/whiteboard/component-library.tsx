@@ -26,13 +26,22 @@ import {
   type WorkflowTemplate,
 } from "@/lib/whiteboard/workflow-templates"
 
+type LibraryCategory = "build-ai" | "deploy-scale" | "developer-tools"
+
 interface LibraryItem {
   id: Tool
   icon: React.ComponentType<{ className?: string }>
   label: string
   description: string
   keywords: string[]
+  category: LibraryCategory
 }
+
+const CATEGORY_ORDER: { id: LibraryCategory; label: string }[] = [
+  { id: "build-ai", label: "Build with AI" },
+  { id: "deploy-scale", label: "Deploy & Scale" },
+  { id: "developer-tools", label: "Developer Tools" },
+]
 
 const ITEMS: LibraryItem[] = [
   {
@@ -41,6 +50,7 @@ const ITEMS: LibraryItem[] = [
     label: "Code block",
     description: "Syntax-highlighted snippet with a file name.",
     keywords: ["code", "snippet", "editor", "file", "typescript", "js"],
+    category: "developer-tools",
   },
   {
     id: "terminal",
@@ -48,6 +58,7 @@ const ITEMS: LibraryItem[] = [
     label: "Terminal",
     description: "Command-line output panel.",
     keywords: ["terminal", "shell", "bash", "cli", "console", "command"],
+    category: "developer-tools",
   },
   {
     id: "website",
@@ -55,6 +66,7 @@ const ITEMS: LibraryItem[] = [
     label: "Website",
     description: "Browser window frame with a URL bar.",
     keywords: ["website", "browser", "web", "url", "page", "site"],
+    category: "deploy-scale",
   },
   {
     id: "server",
@@ -62,6 +74,7 @@ const ITEMS: LibraryItem[] = [
     label: "Server",
     description: "API endpoint node with method and response.",
     keywords: ["server", "api", "endpoint", "backend", "request", "http"],
+    category: "deploy-scale",
   },
   {
     id: "requestdemo",
@@ -69,6 +82,7 @@ const ITEMS: LibraryItem[] = [
     label: "Request traffic",
     description: "Send one or more requests into a compute comparison.",
     keywords: ["request", "traffic", "run", "send", "simulation", "load"],
+    category: "deploy-scale",
   },
   {
     id: "ec2",
@@ -76,6 +90,7 @@ const ITEMS: LibraryItem[] = [
     label: "Amazon EC2",
     description: "Always-on server tower with live illustrative spend.",
     keywords: ["aws", "amazon", "ec2", "server", "instance", "compute", "cost", "spend"],
+    category: "deploy-scale",
   },
   {
     id: "fluidcompute",
@@ -83,6 +98,7 @@ const ITEMS: LibraryItem[] = [
     label: "Vercel Fluid Compute",
     description: "Pooled functions with active-compute spend.",
     keywords: ["vercel", "functions", "fluid", "compute", "serverless", "cost", "spend", "pool"],
+    category: "deploy-scale",
   },
   {
     id: "serverlesscompute",
@@ -90,6 +106,7 @@ const ITEMS: LibraryItem[] = [
     label: "Serverless Functions",
     description: "One isolated function instance per request.",
     keywords: ["functions", "serverless", "compute", "instance", "request", "cost", "spend"],
+    category: "deploy-scale",
   },
   {
     id: "computecomparison",
@@ -97,6 +114,7 @@ const ITEMS: LibraryItem[] = [
     label: "Compute comparison",
     description: "Compare Fluid, Serverless, and Server request usage.",
     keywords: ["fluid", "serverless", "server", "compute", "comparison", "request", "usage", "cost"],
+    category: "deploy-scale",
   },
   {
     id: "filetree",
@@ -104,6 +122,7 @@ const ITEMS: LibraryItem[] = [
     label: "eve agent",
     description: "IDE-style file tree for an eve agent, with editable templates.",
     keywords: ["eve", "agent", "file", "tree", "explorer", "ai", "tool", "folder"],
+    category: "build-ai",
   },
   {
     id: "aigateway",
@@ -111,6 +130,7 @@ const ITEMS: LibraryItem[] = [
     label: "AI Gateway",
     description: "Swap between hundreds of models by changing one line of code.",
     keywords: ["ai", "gateway", "model", "models", "provider", "openai", "anthropic", "llm", "switch", "route"],
+    category: "build-ai",
   },
 ]
 
@@ -195,6 +215,14 @@ export function ComponentLibrary() {
         it.keywords.some((k) => k.includes(q)),
     )
   }, [query])
+
+  const componentGroups = useMemo(
+    () => CATEGORY_ORDER.map((category) => ({
+      ...category,
+      items: ITEMS.filter((item) => item.category === category.id),
+    })).filter((category) => category.items.length > 0),
+    [],
+  )
 
   const templateResults = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -391,7 +419,16 @@ export function ComponentLibrary() {
                 )}
               </div>
             ) : section === "components" ? (
-              <div className="flex flex-col gap-1 overflow-y-auto p-2">{ITEMS.map(renderComponentRow)}</div>
+              <div className="flex flex-col overflow-y-auto p-2">
+                {componentGroups.map((group, index) => (
+                  <section key={group.id} className={cn("flex flex-col gap-1", index > 0 && "mt-3 border-t border-border pt-3")} aria-labelledby={`component-category-${group.id}`}>
+                    <h3 id={`component-category-${group.id}`} className="px-3 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      {group.label}
+                    </h3>
+                    {group.items.map(renderComponentRow)}
+                  </section>
+                ))}
+              </div>
             ) : (
               <div className="flex flex-col gap-1 overflow-y-auto p-2">
                 {WORKFLOW_TEMPLATES.map(renderTemplateRow)}
