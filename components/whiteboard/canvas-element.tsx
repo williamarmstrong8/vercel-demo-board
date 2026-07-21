@@ -1909,7 +1909,7 @@ function Ec2View({ el }: { el: CanvasElement }) {
   const overloaded = requests.length > 3
   return (
     <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
-      <header style={{ flexShrink: 0, minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", alignItems: "center", gap: 9 }}><span style={{ fontSize: 18 }}>▣</span><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Server</strong><span style={{ fontSize: 9.5, color: "#777" }}>Amazon EC2 · always on</span></div></div><span style={{ color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>Usage: <b style={{ color: "#ededed", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
+      <header style={{ flexShrink: 0, minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Server</strong><span style={{ fontSize: 9.5, color: "#777" }}>Amazon EC2 · always on</span></div><span style={{ color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>Usage: <b style={{ color: "#ededed", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
       <div style={{ minHeight: 0, flex: 1, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", color: overloaded ? "#ef2b2d" : "#8b8b95", fontSize: 10 }}><span style={{ fontFamily: "var(--font-mono)" }}>vps</span><span style={{ display: "flex", alignItems: "center", gap: 9 }}><span>{overloaded ? "CPU Slow Down" : "CPU Ready"}</span><FluidGlyph count={requests.length} overloaded={overloaded} /><span>{overloaded ? "Overloaded" : "Always on"}</span></span></div>
         <RequestTimeline requests={requests} now={now} overloaded={overloaded} />
@@ -1957,8 +1957,8 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
       const elapsed = (tick - lastTick.current) / 1000
       lastTick.current = tick
       setNow(tick)
-      const activeCount = traces.filter((trace) => tick - trace.startedAt < trace.duration).length
-      if (activeCount) setUsage((current) => current + elapsed * activeCount)
+      const hasActiveWork = traces.some((trace) => tick - trace.startedAt < trace.duration)
+      if (hasActiveWork) setUsage((current) => current + elapsed)
       setTraces((current) => current.filter((trace) => tick - trace.startedAt < trace.duration + 500))
     }, 80)
     return () => window.clearInterval(timer)
@@ -1967,13 +1967,13 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
   const anyActive = traces.some((trace) => now - trace.startedAt < trace.duration)
   return (
     <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
-      <header style={{ flexShrink: 0, minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 17 }}>▧</span><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Fluid</strong><span style={{ color: "#777", fontSize: 9.5 }}>Vercel Functions</span></div></div><span style={{ fontFamily: "var(--font-mono)", color: "#888", fontSize: 10 }}>Usage: <b style={{ color: "#ddd", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
+      <header style={{ flexShrink: 0, minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Fluid</strong><span style={{ color: "#777", fontSize: 9.5 }}>Vercel Functions</span></div><span style={{ fontFamily: "var(--font-mono)", color: "#888", fontSize: 10 }}>Usage: <b style={{ color: "#ddd", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
       <div style={{ minHeight: 0, flex: 1, overflow: "hidden", padding: "12px 0", display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 12 }}>
         {instanceIds.length === 0 ? <div style={{ margin: "auto", color: "#555", fontFamily: "var(--font-mono)", fontSize: 9 }}>Waiting for requests</div> : instanceIds.map((instance) => {
           const row = traces.filter((trace) => trace.instance === instance)
-          const rowUsage = row.reduce((total, trace) => total + Math.min(Math.max(now - trace.startedAt, 0), trace.duration), 0) / 1000
           const latestEnd = Math.max(...row.map((trace) => trace.startedAt + trace.duration))
           const earliestStart = Math.min(...row.map((trace) => trace.startedAt))
+          const rowUsage = Math.min(Math.max(now - earliestStart, 0), latestEnd - earliestStart) / 1000
           const openingProgress = Math.min(Math.max((now - earliestStart) / 350, 0), 1)
           const closingProgress = Math.min(Math.max((now - latestEnd) / 500, 0), 1)
           const lifecycleOpacity = Math.min(openingProgress, 1 - closingProgress)
