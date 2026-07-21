@@ -13,6 +13,8 @@ import {
   ArrowRight,
   Waypoints,
   Square,
+  HardDrive,
+  FunctionSquare,
 } from "lucide-react"
 import { useWhiteboard } from "@/lib/whiteboard/store"
 import type { ElementType, Tool } from "@/lib/whiteboard/types"
@@ -61,6 +63,20 @@ const ITEMS: LibraryItem[] = [
     keywords: ["server", "api", "endpoint", "backend", "request", "http"],
   },
   {
+    id: "ec2",
+    icon: HardDrive,
+    label: "Amazon EC2",
+    description: "Always-on server tower with live illustrative spend.",
+    keywords: ["aws", "amazon", "ec2", "server", "instance", "compute", "cost", "spend"],
+  },
+  {
+    id: "fluidcompute",
+    icon: FunctionSquare,
+    label: "Vercel Fluid Compute",
+    description: "Pooled functions with active-compute spend.",
+    keywords: ["vercel", "functions", "fluid", "compute", "serverless", "cost", "spend", "pool"],
+  },
+  {
     id: "filetree",
     icon: FolderTree,
     label: "eve agent",
@@ -84,6 +100,8 @@ const NODE_ICONS: Partial<Record<ElementType, React.ComponentType<{ className?: 
   terminal: SquareTerminal,
   filetree: FolderTree,
   aigateway: Waypoints,
+  ec2: HardDrive,
+  fluidcompute: FunctionSquare,
 }
 
 type Section = "components" | "templates"
@@ -106,7 +124,7 @@ function FlowThumbnail({ template }: { template: WorkflowTemplate }) {
         const Icon = NODE_ICONS[n.type] ?? Square
         return (
           <span key={n.ref} className="flex items-center gap-0.5">
-            <span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground shadow-sm">
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground">
               <Icon className="size-3" />
             </span>
             {i < template.nodes.length - 1 && <ArrowRight className="size-2.5 shrink-0 text-muted-foreground/60" />}

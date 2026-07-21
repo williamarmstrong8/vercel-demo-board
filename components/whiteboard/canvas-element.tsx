@@ -813,6 +813,10 @@ function renderContent(el: CanvasElement, b: { width: number; height: number }, 
       return <SandboxView el={el} />
     case "aigateway":
       return <AiGatewayView el={el} />
+    case "ec2":
+      return <Ec2View el={el} />
+    case "fluidcompute":
+      return <FluidComputeView el={el} />
     case "image":
       return <ImageView el={el} b={b} />
     default:
@@ -1770,6 +1774,144 @@ function ServerView({ el, phase }: { el: CanvasElement; phase: RunPhase | undefi
           {status === "idle" ? "ready" : status === "processing" ? "handling request…" : "200 OK · 42ms"}
         </span>
       </div>
+    </div>
+  )
+}
+
+function useIllustrativeSpend(
+  start: number,
+  ratePerSecond: number,
+  mode: "continuous" | "bursts",
+  dutyCycle = 0.42,
+) {
+  const mountedAt = useRef(Date.now())
+  const [elapsed, setElapsed] = useState(0)
+
+  useEffect(() => {
+    const tick = () => setElapsed((Date.now() - mountedAt.current) / 1000)
+    tick()
+    const timer = window.setInterval(tick, 80)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  const cycleSeconds = 4
+  const fullCycles = Math.floor(elapsed / cycleSeconds)
+  const cycleElapsed = elapsed % cycleSeconds
+  const activeSeconds =
+    mode === "continuous"
+      ? elapsed
+      : fullCycles * cycleSeconds * dutyCycle + Math.min(cycleElapsed, cycleSeconds * dutyCycle)
+
+  return {
+    spend: start + activeSeconds * ratePerSecond,
+    active: mode === "continuous" || cycleElapsed < cycleSeconds * dutyCycle,
+  }
+}
+
+function SpendDisplay({ amount, rateLabel }: { amount: number; rateLabel: string }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 650, color: "#ededed", letterSpacing: "-0.04em" }}>
+        ${amount.toFixed(4)}
+      </span>
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "#737373", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+        {rateLabel}
+      </span>
+    </div>
+  )
+}
+
+function Ec2View({ el }: { el: CanvasElement }) {
+  const { spend } = useIllustrativeSpend(el.spendStart ?? 12.4, el.spendRatePerSecond ?? 0.0018, "continuous")
+  const rackRows = ["Application", "Runtime", "Operating system", "Reserved capacity"]
+
+  return (
+    <div style={{ width: "100%", height: "100%", border: "1px solid #2e2e2e", borderRadius: el.rounded ? 12 : 2, background: "#0a0a0a", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
+      <div style={{ minHeight: 66, padding: "0 16px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid #242424", background: "#111" }}>
+        <div style={{ width: 34, height: 34, border: "1px solid #3a3a3a", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: "#f59e0b" }}>EC2</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <strong style={{ fontSize: 14 }}>Amazon EC2</strong>
+          <span style={{ fontSize: 10, color: "#8a8a8a" }}>Single provisioned instance</span>
+        </div>
+        <span style={{ flex: 1 }} />
+        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, color: "#fbbf24" }}><span style={{ width: 6, height: 6, borderRadius: 99, background: "#f59e0b" }} />Always running</span>
+      </div>
+
+      <div style={{ padding: 16, display: "flex", gap: 16, flex: 1 }}>
+        <div style={{ width: 86, border: "1px solid #353535", borderRadius: 8, padding: 7, display: "flex", flexDirection: "column", gap: 6, background: "#111" }}>
+          {rackRows.map((row, index) => (
+            <div key={row} style={{ flex: 1, minHeight: 42, border: "1px solid #303030", borderRadius: 5, background: index === 0 ? "#17130b" : "#151515", padding: "7px 6px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 8, color: "#777", textTransform: "uppercase" }}>{row}</span>
+              <span style={{ display: "flex", gap: 3 }}>{[0, 1, 2].map((dot) => <i key={dot} style={{ width: 4, height: 4, borderRadius: 99, background: dot === 0 ? "#f59e0b" : "#333" }} />)}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between", padding: "4px 0" }}>
+          <div>
+            <div style={{ fontSize: 11, color: "#8a8a8a", marginBottom: 7 }}>Capacity model</div>
+            <div style={{ fontSize: 19, fontWeight: 650, letterSpacing: "-0.03em" }}>Provision for peak</div>
+            <p style={{ fontSize: 11, lineHeight: 1.55, color: "#8a8a8a", marginTop: 7 }}>The whole tower stays allocated through traffic and idle time.</p>
+          </div>
+          <SpendDisplay amount={spend} rateLabel="illustrative always-on spend" />
+        </div>
+      </div>
+      <div style={{ padding: "10px 16px", borderTop: "1px solid #242424", fontSize: 9, color: "#666", textTransform: "uppercase", letterSpacing: "0.08em" }}>Demo rate · not official pricing</div>
+    </div>
+  )
+}
+
+function FluidComputeView({ el }: { el: CanvasElement }) {
+  const { spend, active } = useIllustrativeSpend(
+    el.spendStart ?? 3.1,
+    el.spendRatePerSecond ?? 0.00055,
+    "bursts",
+    el.activeDutyCycle ?? 0.42,
+  )
+  const functions = ["checkout", "catalog", "webhook"]
+
+  return (
+    <div style={{ width: "100%", height: "100%", border: "1px solid #2e2e2e", borderRadius: el.rounded ? 12 : 2, background: "#0a0a0a", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
+      <div style={{ minHeight: 66, padding: "0 16px", display: "flex", alignItems: "center", gap: 11, borderBottom: "1px solid #242424", background: "#111" }}>
+        <span style={{ width: 0, height: 0, borderLeft: "10px solid transparent", borderRight: "10px solid transparent", borderBottom: "18px solid #ededed", transform: "rotate(0deg)" }} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <strong style={{ fontSize: 14 }}>Vercel Functions</strong>
+          <span style={{ fontSize: 10, color: "#8a8a8a" }}>Fluid compute</span>
+        </div>
+        <span style={{ flex: 1 }} />
+        <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, color: active ? "#86efac" : "#737373" }}><span style={{ width: 6, height: 6, borderRadius: 99, background: active ? "#22c55e" : "#444" }} />{active ? "Active compute" : "Idle · $0 compute"}</span>
+      </div>
+
+      <div style={{ padding: 16, display: "flex", gap: 14, flex: 1 }}>
+        <div style={{ width: 176, display: "flex", flexDirection: "column", gap: 7 }}>
+          <span style={{ fontSize: 9, color: "#737373", textTransform: "uppercase", letterSpacing: "0.08em" }}>Functions</span>
+          {functions.map((fn, index) => (
+            <div key={fn} style={{ height: 44, border: "1px solid #303030", borderRadius: 7, display: "flex", alignItems: "center", padding: "0 10px", gap: 8, background: active && index < 2 ? "#101812" : "#111" }}>
+              <span style={{ fontFamily: "var(--font-mono)", color: active && index < 2 ? "#86efac" : "#777", fontSize: 11 }}>ƒ</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "#cfcfcf" }}>{fn}</span>
+              <span style={{ marginLeft: "auto", width: 22, height: 3, borderRadius: 99, background: active && index < 2 ? "#22c55e" : "#333" }} />
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", color: "#555", fontSize: 18 }}>→</div>
+
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 9 }}>
+          <span style={{ fontSize: 9, color: "#737373", textTransform: "uppercase", letterSpacing: "0.08em" }}>Shared warm pool</span>
+          <div style={{ display: "flex", gap: 7 }}>
+            {[0, 1].map((instance) => (
+              <div key={instance} style={{ flex: 1, height: 92, border: `1px solid ${active ? "#2d5136" : "#303030"}`, borderRadius: 8, background: active ? "#0d1710" : "#111", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                <div style={{ width: 38, height: 30, border: "1px solid #3b3b3b", borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 9, color: active ? "#86efac" : "#777" }}>CPU</div>
+                <span style={{ fontSize: 8, color: "#666", textTransform: "uppercase" }}>shared {instance + 1}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: "auto", display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12 }}>
+            <div style={{ maxWidth: 112, fontSize: 10, lineHeight: 1.45, color: "#777" }}>Resources are reused across concurrent invocations.</div>
+            <SpendDisplay amount={spend} rateLabel="illustrative active spend" />
+          </div>
+        </div>
+      </div>
+      <div style={{ padding: "10px 16px", borderTop: "1px solid #242424", fontSize: 9, color: "#666", textTransform: "uppercase", letterSpacing: "0.08em" }}>Counter pauses during idle periods</div>
     </div>
   )
 }

@@ -36,6 +36,81 @@ const ROW_NODE = 160
 
 export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   {
+    id: "ec2-to-fluid-compute",
+    name: "EC2 to Vercel Functions + Fluid Compute",
+    description:
+      "Compare an always-on EC2 instance with pooled Vercel Functions that accrue spend only during active compute.",
+    preview: ["EC2", "VS", "Vercel Functions", "Fluid compute"],
+    nodes: [
+      {
+        ref: "heading",
+        type: "text",
+        x: 80,
+        y: 40,
+        overrides: {
+          width: 960,
+          height: 52,
+          text: "EC2 → Vercel Functions with Fluid compute",
+          fontSize: 30,
+          bold: true,
+        },
+      },
+      {
+        ref: "ec2",
+        type: "ec2",
+        x: 80,
+        y: 140,
+        overrides: { spendStart: 12.4, spendRatePerSecond: 0.0018 },
+      },
+      {
+        ref: "versus",
+        type: "text",
+        x: 470,
+        y: 300,
+        overrides: {
+          width: 70,
+          height: 44,
+          text: "VS",
+          fontSize: 24,
+          bold: true,
+          textAlign: "center",
+        },
+      },
+      {
+        ref: "fluid",
+        type: "fluidcompute",
+        x: 580,
+        y: 140,
+        overrides: { spendStart: 3.1, spendRatePerSecond: 0.00055, activeDutyCycle: 0.42 },
+      },
+      {
+        ref: "ec2-note",
+        type: "card",
+        x: 80,
+        y: 570,
+        overrides: {
+          width: 340,
+          height: 118,
+          title: "Pay while idle",
+          text: "One provisioned instance keeps accruing illustrative spend whether requests arrive or not.",
+        },
+      },
+      {
+        ref: "fluid-note",
+        type: "card",
+        x: 580,
+        y: 570,
+        overrides: {
+          width: 480,
+          height: 118,
+          title: "Pay for active compute",
+          text: "Multiple functions share warm resources. The illustrative counter advances only during active bursts.",
+        },
+      },
+    ],
+    connections: [],
+  },
+  {
     id: "fullstack-flow",
     name: "Full-stack flow",
     description:
