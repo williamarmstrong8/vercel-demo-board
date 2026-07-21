@@ -1,7 +1,7 @@
 "use client"
 
 import { memo, useState, useLayoutEffect, useEffect, useRef, useMemo } from "react"
-import { Play, Loader2, Check, RotateCw, Lock, ChevronDown, ChevronRight, Folder, FileText, SquareTerminal, ExternalLink, Waypoints, Server, Send } from "lucide-react"
+import { Play, Loader2, Check, RotateCw, Lock, ChevronDown, ChevronRight, Folder, FileText, SquareTerminal, ExternalLink, Waypoints, Server, Send, Zap } from "lucide-react"
 import type { AgentFile, CanvasElement, RunPhase } from "@/lib/whiteboard/types"
 import { getBounds } from "@/lib/whiteboard/geometry"
 import { getCodeTheme, tokenizeLine } from "@/lib/whiteboard/code-themes"
@@ -96,12 +96,15 @@ export const CanvasElementView = memo(function CanvasElementView({ el }: { el: C
   const editing = useWhiteboard((s) => s.editingId === el.id)
   const connections = useWhiteboard((s) => (s.projects.find((p) => p.id === s.currentId) ?? s.projects[0]).connections)
   const active = phase === "running"
+  const isLinear = el.type === "arrow" || el.type === "line"
   const wrapperStyle: React.CSSProperties = {
     position: "absolute",
     left: b.x,
     top: b.y,
-    width: b.width,
-    height: b.height,
+    // Axis-aligned lines have a zero-width or zero-height geometric bound.
+    // Keep a one-pixel SVG viewport so the stroke and marker remain paintable.
+    width: isLinear ? Math.max(1, b.width) : b.width,
+    height: isLinear ? Math.max(1, b.height) : b.height,
     transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined,
     opacity: el.opacity,
     pointerEvents: "none",
@@ -817,6 +820,10 @@ function renderContent(el: CanvasElement, b: { width: number; height: number }, 
       return <Ec2View el={el} />
   case "fluidcompute":
   return <FluidComputeView el={el} />
+  case "serverlesscompute":
+  return <ServerlessComputeView el={el} />
+  case "computecomparison":
+  return <ComputeComparisonView el={el} />
   case "requestdemo":
   return <RequestDemoView el={el} />
   case "image":
@@ -1780,18 +1787,20 @@ function ServerView({ el, phase }: { el: CanvasElement; phase: RunPhase | undefi
   )
 }
 
-function useIllustrativeSpend(start: number, ratePerSecond: number, enabled = true) {
+function useIllustrativeSpend(start: number, ratePerSecond: number, activity: boolean | number = true, scope?: string) {
   const [spend, setSpend] = useState(start)
   const lastTick = useRef(Date.now())
+  const activeInstances = typeof activity === "number" ? activity : activity ? 1 : 0
 
   useEffect(() => {
     const tick = () => {
       const now = Date.now()
       const elapsed = (now - lastTick.current) / 1000
       lastTick.current = now
-      if (enabled) setSpend((current) => current + elapsed * ratePerSecond)
+      if (activeInstances > 0) setSpend((current) => current + elapsed * ratePerSecond * activeInstances)
     }
-    const reset = () => {
+    const reset = (event: Event) => {
+      if (scope && (event as CustomEvent<DemoReset>).detail.scope !== scope) return
       lastTick.current = Date.now()
       setSpend(0)
     }
@@ -1801,9 +1810,9 @@ function useIllustrativeSpend(start: number, ratePerSecond: number, enabled = tr
       window.clearInterval(timer)
       window.removeEventListener(RESET_REQUEST_EVENT, reset)
     }
-  }, [enabled, ratePerSecond])
+  }, [activeInstances, ratePerSecond, scope])
 
-  return { spend, active: enabled }
+  return { spend, active: activeInstances > 0 }
 }
 
 const computeToken = {
@@ -1831,21 +1840,25 @@ function SpendDisplay({ amount, rateLabel }: { amount: number; rateLabel: string
   )
 }
 
-type DemoRequest = { id: number; color: string; startedAt: number; duration: number }
+type DemoRequest = { id: number; color: string; startedAt: number; duration: number; scope: string }
+type DemoReset = { scope: string }
 const REQUEST_EVENT = "v0-compute-demo-request"
 const RESET_REQUEST_EVENT = "v0-compute-demo-reset"
 const REQUEST_COLORS = ["#d946ef", "#14b8a6", "#2563eb", "#f59e0b"]
 const FLUID_WORK_COLORS = ["#5b102b", "#18544d", "#173d78", "#71470b"]
 let requestSequence = 0
 
-function useDemoRequests() {
+function useDemoRequests(scope: string) {
   const [requests, setRequests] = useState<DemoRequest[]>([])
   useEffect(() => {
     const receive = (event: Event) => {
       const request = (event as CustomEvent<DemoRequest>).detail
+      if (request.scope !== scope) return
       setRequests((current) => [...current.slice(-7), request])
     }
-    const reset = () => setRequests([])
+    const reset = (event: Event) => {
+      if ((event as CustomEvent<DemoReset>).detail.scope === scope) setRequests([])
+    }
     window.addEventListener(REQUEST_EVENT, receive)
     window.addEventListener(RESET_REQUEST_EVENT, reset)
     const cleanup = window.setInterval(() => setRequests((current) => current.filter((request) => Date.now() - request.startedAt < request.duration)), 120)
@@ -1854,26 +1867,41 @@ function useDemoRequests() {
       window.removeEventListener(RESET_REQUEST_EVENT, reset)
       window.clearInterval(cleanup)
     }
-  }, [])
+  }, [scope])
   return requests
+}
+
+function dispatchDemoRequest(scope: string) {
+  const id = ++requestSequence
+  const request: DemoRequest = { id, color: REQUEST_COLORS[(id - 1) % REQUEST_COLORS.length], startedAt: Date.now(), duration: 4600, scope }
+  window.dispatchEvent(new CustomEvent(REQUEST_EVENT, { detail: request }))
+}
+
+const requestControlStyle: React.CSSProperties = { pointerEvents: "auto", display: "inline-flex", alignItems: "center", justifyContent: "center", height: 30, borderRadius: 9999, border: "1px solid rgba(255,255,255,0.14)", background: "#000000", color: "#ffffff", fontFamily: "var(--font-sans)", cursor: "pointer", boxShadow: "none" }
+
+function RunRequestButton({ scope }: { scope: string }) {
+  return <button type="button" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); dispatchDemoRequest(scope) }} style={{ ...requestControlStyle, gap: 6, padding: "0 14px", fontSize: 13, fontWeight: 500, whiteSpace: "nowrap" }}><Play size={13} fill="currentColor" />Run request</button>
+}
+
+function ComputeCardShell({ el, children }: { el: CanvasElement; children: React.ReactNode }) {
+  const showControl = el.showRequestButton !== false
+  return <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: showControl ? 10 : 0 }}>{<div style={{ width: "100%", minHeight: 0, flex: 1 }}>{children}</div>}{showControl && <RunRequestButton scope={el.requestScope ?? el.id} />}</div>
 }
 
 function RequestDemoView({ el }: { el: CanvasElement }) {
   const [sent, setSent] = useState(0)
+  const scope = el.requestScope ?? el.id
   const run = (event: React.MouseEvent) => {
     event.stopPropagation()
-    const id = ++requestSequence
-    const request: DemoRequest = { id, color: REQUEST_COLORS[(id - 1) % REQUEST_COLORS.length], startedAt: Date.now(), duration: 4600 }
-    window.dispatchEvent(new CustomEvent(REQUEST_EVENT, { detail: request }))
+    dispatchDemoRequest(scope)
     setSent((count) => count + 1)
   }
   const reset = (event: React.MouseEvent) => {
     event.stopPropagation()
     requestSequence = 0
     setSent(0)
-    window.dispatchEvent(new Event(RESET_REQUEST_EVENT))
+    window.dispatchEvent(new CustomEvent<DemoReset>(RESET_REQUEST_EVENT, { detail: { scope } }))
   }
-  const controlStyle: React.CSSProperties = { pointerEvents: "auto", display: "inline-flex", alignItems: "center", justifyContent: "center", height: 30, borderRadius: 9999, border: "1px solid rgba(255,255,255,0.14)", background: "#000000", color: "#ffffff", fontFamily: "var(--font-sans)", cursor: "pointer", boxShadow: "none" }
   return (
     <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, fontFamily: "var(--font-sans)" }}>
       <div style={{ width: "100%", flex: 1, border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: computeToken.surface, color: computeToken.text, padding: "12px 15px", display: "flex", alignItems: "center", gap: 12 }}>
@@ -1882,17 +1910,16 @@ function RequestDemoView({ el }: { el: CanvasElement }) {
         <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: computeToken.textMuted }}>{sent} sent</span>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <button type="button" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onClick={run} style={{ ...controlStyle, gap: 6, padding: "0 14px", fontSize: 13, fontWeight: 500, whiteSpace: "nowrap" }}><Play size={13} fill="currentColor" />Run request</button>
-        {sent > 0 && <button type="button" title="Reset requests" aria-label="Reset requests" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onClick={reset} style={{ ...controlStyle, width: 30 }}><RotateCw size={14} /></button>}
+        <button type="button" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onClick={run} style={{ ...requestControlStyle, gap: 6, padding: "0 14px", fontSize: 13, fontWeight: 500, whiteSpace: "nowrap" }}><Play size={13} fill="currentColor" />Run request</button>
+        {sent > 0 && <button type="button" title="Reset requests" aria-label="Reset requests" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onClick={reset} style={{ ...requestControlStyle, width: 30 }}><RotateCw size={14} /></button>}
       </div>
     </div>
   )
 }
 
-function RequestTimeline({ requests, now, overloaded = false }: { requests: DemoRequest[]; now: number; overloaded?: boolean }) {
+function RequestTimeline({ requests, now, overloaded = false, compact = false }: { requests: DemoRequest[]; now: number; overloaded?: boolean; compact?: boolean }) {
   return (
-    <div style={{ position: "relative", height: Math.max(46, requests.length * 8 + 12), border: `1px solid ${overloaded ? "#ef2b2d" : "#252525"}`, borderRadius: 8, background: "#111", overflow: "hidden" }}>
-      {requests.length === 0 && <span style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#555", fontFamily: "var(--font-mono)", fontSize: 8.5 }}>idle capacity</span>}
+  <div style={{ position: "relative", height: compact ? 28 : Math.max(46, requests.length * 8 + 12), border: `1px solid ${overloaded ? "#ef2b2d" : "#252525"}`, borderRadius: 8, background: "#111", overflow: "hidden" }}>
       {requests.map((request, index) => {
         const progress = Math.min(Math.max((now - request.startedAt) / request.duration, 0), 1)
         const traceLeft = 100 - progress * 216
@@ -1910,35 +1937,40 @@ function RequestTimeline({ requests, now, overloaded = false }: { requests: Demo
 }
 
 function Ec2View({ el }: { el: CanvasElement }) {
-  const { spend } = useIllustrativeSpend(el.spendStart ?? 12.4, el.spendRatePerSecond ?? 0.45)
-  const requests = useDemoRequests()
+  const scope = el.requestScope ?? el.id
+  const { spend } = useIllustrativeSpend(el.spendStart ?? 12.4, el.spendRatePerSecond ?? 0.45, true, scope)
+  const requests = useDemoRequests(scope)
   const [startedAt, setStartedAt] = useState(() => Date.now())
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
-    const reset = () => { const tick = Date.now(); setStartedAt(tick); setNow(tick) }
+    const reset = (event: Event) => {
+      if ((event as CustomEvent<DemoReset>).detail.scope !== scope) return
+      const tick = Date.now(); setStartedAt(tick); setNow(tick)
+    }
     window.addEventListener(RESET_REQUEST_EVENT, reset)
     return () => window.removeEventListener(RESET_REQUEST_EVENT, reset)
-  }, [])
+  }, [scope])
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 80); return () => window.clearInterval(timer) }, [])
   const usage = (now - startedAt) / 1000
   const overloaded = requests.length > 3
   return (
-    <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
+    <ComputeCardShell el={el}>
+    <div style={{ width: "100%", height: "100%", border: el.showContainerBorder === false ? "none" : `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
       <header style={{ flexShrink: 0, minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Server</strong><span style={{ fontSize: 9.5, color: "#777" }}>Amazon EC2 · always on</span></div><span style={{ color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>Usage: <b style={{ color: "#ededed", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
       <div style={{ minHeight: 0, flex: 1, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-        <div aria-label="Two provisioned server towers" style={{ display: "flex", gap: 8 }}>
+        {el.showServerTowers !== false && <div aria-label="Two provisioned server towers" style={{ display: "flex", gap: 8 }}>
           {[0, 1].map((tower) => (
             <div key={tower} style={{ flex: 1, padding: 6, border: "1px solid #252525", borderRadius: 7, background: "#0a0a0a", display: "flex", flexDirection: "column", gap: 4 }}>
               {[0, 1].map((unit) => <RackUnit key={unit} accent={overloaded ? "#ef2b2d" : "#3f7fff"} active={requests.length > 0} pulse={requests.length > 0} />)}
             </div>
           ))}
-        </div>
+        </div>}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", color: overloaded ? "#ef2b2d" : "#8b8b95", fontSize: 10 }}><span style={{ fontFamily: "var(--font-mono)" }}>vps</span><span style={{ display: "flex", alignItems: "center", gap: 9 }}><span>{overloaded ? "CPU Slow Down" : "CPU Ready"}</span><FluidGlyph count={requests.length} overloaded={overloaded} /><span>{overloaded ? "Overloaded" : "Always on"}</span></span></div>
         <RequestTimeline requests={requests} now={now} overloaded={overloaded} />
-        <p style={{ margin: "auto 0 0", color: overloaded ? "#ef2b2d" : "#666", fontSize: 9.5, textAlign: "center" }}>{overloaded ? "Capacity exceeded — requests are slowing down." : "One provisioned server handles up to three concurrent requests."}</p>
       </div>
-      <footer style={{ flexShrink: 0, padding: "11px 16px 13px", borderTop: "1px solid #202020", display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel="one always-on server" /></footer>
+      {el.showPricing !== false && <footer style={{ flexShrink: 0, padding: "11px 16px 13px", borderTop: "1px solid #202020", display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel="one always-on server" /></footer>}
     </div>
+    </ComputeCardShell>
   )
 }
 
@@ -1956,15 +1988,21 @@ function FluidGlyph({ count, overloaded = false }: { count: number; overloaded?:
 const FLUID_BILLING_FRACTION = 116 / 216
 
 function FluidComputeView({ el }: { el: CanvasElement }) {
+  const scope = el.requestScope ?? el.id
   const [traces, setTraces] = useState<FluidTrace[]>([])
   const [now, setNow] = useState(() => Date.now())
-  const hasActiveRequests = traces.some((trace) => now - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION)
-  const { spend } = useIllustrativeSpend(el.spendStart ?? 3.1, el.spendRatePerSecond ?? 0.14, hasActiveRequests)
+  const activeInstanceCount = new Set(
+    traces
+      .filter((trace) => now - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION)
+      .map((trace) => trace.instance),
+  ).size
+  const { spend } = useIllustrativeSpend(el.spendStart ?? 3.1, el.spendRatePerSecond ?? 0.14, activeInstanceCount, scope)
   const [usage, setUsage] = useState(0)
   const lastTick = useRef(Date.now())
   useEffect(() => {
     const receive = (event: Event) => {
       const request = (event as CustomEvent<DemoRequest>).detail
+      if (request.scope !== scope) return
       setTraces((current) => {
         const activeByInstance = new Map<number, number>()
         current.filter((trace) => request.startedAt - trace.startedAt < trace.duration).forEach((trace) => activeByInstance.set(trace.instance, (activeByInstance.get(trace.instance) ?? 0) + 1))
@@ -1973,7 +2011,8 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
         return [...current.slice(-11), { ...request, instance }]
       })
     }
-    const reset = () => {
+    const reset = (event: Event) => {
+      if ((event as CustomEvent<DemoReset>).detail.scope !== scope) return
       setTraces([])
       setUsage(0)
       const tick = Date.now()
@@ -1986,26 +2025,31 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
       window.removeEventListener(REQUEST_EVENT, receive)
       window.removeEventListener(RESET_REQUEST_EVENT, reset)
     }
-  }, [])
+  }, [scope])
   useEffect(() => {
     const timer = window.setInterval(() => {
       const tick = Date.now()
       const elapsed = (tick - lastTick.current) / 1000
       lastTick.current = tick
       setNow(tick)
-      const hasActiveWork = traces.some((trace) => tick - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION)
-      if (hasActiveWork) setUsage((current) => current + elapsed)
+      const activeInstances = new Set(
+        traces
+          .filter((trace) => tick - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION)
+          .map((trace) => trace.instance),
+      ).size
+      if (activeInstances > 0) setUsage((current) => current + elapsed * activeInstances)
       setTraces((current) => current.filter((trace) => tick - trace.startedAt < trace.duration + 500))
     }, 80)
     return () => window.clearInterval(timer)
   }, [traces])
   const instanceIds = Array.from(new Set(traces.map((trace) => trace.instance))).sort((a, b) => a - b).slice(-3)
-  const anyActive = traces.some((trace) => now - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION)
+  const anyActive = activeInstanceCount > 0
   return (
-    <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
+    <ComputeCardShell el={el}>
+    <div style={{ width: "100%", height: "100%", border: el.showContainerBorder === false ? "none" : `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
       <header style={{ flexShrink: 0, minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Fluid</strong><span style={{ color: "#777", fontSize: 9.5 }}>Vercel Functions</span></div><span style={{ fontFamily: "var(--font-mono)", color: "#888", fontSize: 10 }}>Usage: <b style={{ color: "#ddd", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
       <div style={{ minHeight: 0, flex: 1, overflow: "hidden", padding: "12px 0", display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 12 }}>
-        {instanceIds.length === 0 ? <div style={{ margin: "auto", color: "#555", fontFamily: "var(--font-mono)", fontSize: 9 }}>Waiting for requests</div> : instanceIds.map((instance) => {
+        {instanceIds.length > 0 && <div key={traces.at(-1)?.id} className="wb-compute-stack-in" style={{ display: "flex", flexDirection: "column", gap: 12 }}>{instanceIds.map((instance) => {
           const row = traces.filter((trace) => trace.instance === instance)
           const latestEnd = Math.max(...row.map((trace) => trace.startedAt + trace.duration))
           const latestBillingEnd = Math.max(...row.map((trace) => trace.startedAt + trace.duration * FLUID_BILLING_FRACTION))
@@ -2020,9 +2064,141 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
               <RequestTimeline requests={row} now={now} />
             </div>
           )
-        })}
+        })}</div>}
       </div>
-      <footer style={{ flexShrink: 0, padding: "11px 16px 13px", borderTop: "1px solid #202020", display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel={anyActive ? "active compute spend" : "spend paused"} /></footer>
+      {el.showPricing !== false && <footer style={{ flexShrink: 0, padding: "11px 16px 13px", borderTop: "1px solid #202020", display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel={anyActive ? "active compute spend" : "spend paused"} /></footer>}
+    </div>
+    </ComputeCardShell>
+  )
+}
+
+function ServerlessComputeView({ el }: { el: CanvasElement }) {
+  const scope = el.requestScope ?? el.id
+  const [traces, setTraces] = useState<FluidTrace[]>([])
+  const [now, setNow] = useState(() => Date.now())
+  const activeInstanceCount = traces.filter(
+    (trace) => now - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION,
+  ).length
+  const { spend } = useIllustrativeSpend(el.spendStart ?? 0, el.spendRatePerSecond ?? 0.14, activeInstanceCount, scope)
+  const [usage, setUsage] = useState(0)
+  const lastTick = useRef(Date.now())
+  useEffect(() => {
+    const receive = (event: Event) => {
+      const request = (event as CustomEvent<DemoRequest>).detail
+      if (request.scope !== scope) return
+      setTraces((current) => [...current.slice(-11), { ...request, instance: request.id }])
+    }
+    const reset = (event: Event) => {
+      if ((event as CustomEvent<DemoReset>).detail.scope !== scope) return
+      setTraces([])
+      setUsage(0)
+      const tick = Date.now()
+      setNow(tick)
+      lastTick.current = tick
+    }
+    window.addEventListener(REQUEST_EVENT, receive)
+    window.addEventListener(RESET_REQUEST_EVENT, reset)
+    return () => {
+      window.removeEventListener(REQUEST_EVENT, receive)
+      window.removeEventListener(RESET_REQUEST_EVENT, reset)
+    }
+  }, [scope])
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const tick = Date.now()
+      const elapsed = (tick - lastTick.current) / 1000
+      lastTick.current = tick
+      setNow(tick)
+      const activeInstances = traces.filter(
+        (trace) => tick - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION,
+      ).length
+      if (activeInstances > 0) setUsage((current) => current + elapsed * activeInstances)
+      setTraces((current) => current.filter((trace) => tick - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION + 500))
+    }, 80)
+    return () => window.clearInterval(timer)
+  }, [traces])
+  const visibleTraces = traces.slice(-5)
+  return (
+    <ComputeCardShell el={el}>
+    <div style={{ width: "100%", height: "100%", border: el.showContainerBorder === false ? "none" : `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
+      <header style={{ flexShrink: 0, minHeight: 58, padding: "8px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Serverless</strong><span style={{ color: "#777", fontSize: 9.5 }}>One request per instance</span></div><span style={{ fontFamily: "var(--font-mono)", color: "#888", fontSize: 10 }}>Usage: <b style={{ color: "#ddd", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
+      <div style={{ minHeight: 0, flex: 1, overflow: "hidden", padding: "8px 0", display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 7 }}>
+        {visibleTraces.length > 0 && <div key={visibleTraces.at(-1)?.id} className="wb-compute-stack-in" style={{ display: "flex", flexDirection: "column", gap: 7 }}>{visibleTraces.map((trace) => {
+          const billingEnd = trace.startedAt + trace.duration * FLUID_BILLING_FRACTION
+          const latestEnd = billingEnd
+          const rowUsage = Math.min(Math.max(now - trace.startedAt, 0), billingEnd - trace.startedAt) / 1000
+          const openingProgress = Math.min(Math.max((now - trace.startedAt) / 350, 0), 1)
+          const closingProgress = Math.min(Math.max((now - latestEnd) / 500, 0), 1)
+          const lifecycleOpacity = Math.min(openingProgress, 1 - closingProgress)
+          const active = now < billingEnd
+          return (
+            <div key={trace.id} style={{ flexShrink: 0, padding: "0 14px", display: "flex", flexDirection: "column", gap: 4, opacity: lifecycleOpacity, transform: `translateY(${(1 - openingProgress) * 4 - closingProgress * 4}px)`, transition: "opacity 80ms linear, transform 80ms linear" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ color: "#7d7d86", fontFamily: "var(--font-mono)", fontSize: 10.5 }}>serverless-instance-{trace.instance}</span><span style={{ display: "flex", alignItems: "center", gap: 8 }}><FluidGlyph count={active ? 1 : 0} /><span style={{ width: 32, color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>{rowUsage.toFixed(1)}s</span></span></div>
+              <RequestTimeline requests={[trace]} now={now} compact />
+            </div>
+          )
+        })}</div>}
+      </div>
+      {el.showPricing !== false && <footer style={{ flexShrink: 0, padding: "11px 16px 13px", borderTop: "1px solid #202020", display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel={activeInstanceCount > 0 ? "active compute spend" : "spend paused"} /></footer>}
+    </div>
+    </ComputeCardShell>
+  )
+}
+
+type ComparisonKind = "fluid" | "serverless" | "server"
+
+const comparisonKinds: ComparisonKind[] = ["fluid", "serverless", "server"]
+
+function ComputeComparisonView({ el }: { el: CanvasElement }) {
+  const update = useWhiteboard((state) => state.update)
+  const scope = el.requestScope ?? el.id
+  const [enabled, setEnabled] = useState<Record<ComparisonKind, boolean>>({ fluid: true, serverless: true, server: true })
+  const comparisonHeaderHeight = 58
+  const comparisonSectionHeight = (980 - comparisonHeaderHeight) / 3
+  useLayoutEffect(() => {
+    if (el.width < 560) {
+      update([el.id], { width: 560 })
+    }
+  }, [el.id, el.width, update])
+  const scopes: Record<ComparisonKind, string> = {
+    fluid: `${scope}:fluid`,
+    serverless: `${scope}:serverless`,
+    server: `${scope}:server`,
+  }
+  const sectionElements: Record<ComparisonKind, CanvasElement> = {
+    fluid: { ...el, id: `${el.id}:fluid`, type: "fluidcompute", requestScope: scopes.fluid, showRequestButton: false, showPricing: false, showContainerBorder: false, rounded: false },
+    serverless: { ...el, id: `${el.id}:serverless`, type: "serverlesscompute", requestScope: scopes.serverless, showRequestButton: false, showPricing: false, showContainerBorder: false, rounded: false },
+    server: { ...el, id: `${el.id}:server`, type: "ec2", requestScope: scopes.server, showRequestButton: false, showPricing: false, showServerTowers: false, showContainerBorder: false, rounded: false },
+  }
+  const sendRequest = (event: React.MouseEvent) => {
+    event.stopPropagation()
+    comparisonKinds.forEach((kind) => {
+      if (enabled[kind]) dispatchDemoRequest(scopes[kind])
+    })
+  }
+  const toggle = (kind: ComparisonKind) => (event: React.ChangeEvent<HTMLInputElement>) => {
+    event.stopPropagation()
+    const checked = event.target.checked
+    setEnabled((current) => {
+      const next = { ...current, [kind]: checked }
+      const selectedCount = comparisonKinds.filter((item) => next[item]).length
+      update([el.id], { height: comparisonHeaderHeight + comparisonSectionHeight * selectedCount })
+      return next
+    })
+  }
+  return (
+    <div style={{ width: "100%", height: "100%", border: el.showContainerBorder === false ? "none" : `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
+      <header onDoubleClick={(event) => event.stopPropagation()} style={{ pointerEvents: "auto", flexShrink: 0, minHeight: 58, padding: "11px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, borderBottom: "1px solid #202020", background: "#080808" }}>
+        <div style={{ minWidth: 0, display: "flex", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+          {comparisonKinds.map((kind) => <label key={kind} onPointerDown={(event) => event.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 11.5, whiteSpace: "nowrap" }}><input type="checkbox" checked={enabled[kind]} onChange={toggle(kind)} style={{ width: 14, height: 14, accentColor: "#ededed" }} />{kind === "fluid" ? "Fluid" : kind === "serverless" ? "Serverless" : "Server"}</label>)}
+        </div>
+        <button type="button" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onClick={sendRequest} style={{ ...requestControlStyle, flexShrink: 0, height: 32, gap: 7, padding: "0 14px", background: "#ededed", color: "#111", fontSize: 11.5, fontWeight: 500 }}><Zap size={14} />Send Request</button>
+      </header>
+      <div style={{ minHeight: 0, flex: 1, display: "flex", flexDirection: "column" }}>
+        {enabled.fluid && <div style={{ height: comparisonSectionHeight, flexShrink: 0, overflow: "hidden" }}><FluidComputeView el={sectionElements.fluid} /></div>}
+        {enabled.serverless && <div style={{ height: comparisonSectionHeight, flexShrink: 0, overflow: "hidden" }}><ServerlessComputeView el={sectionElements.serverless} /></div>}
+        {enabled.server && <div style={{ height: comparisonSectionHeight, flexShrink: 0, overflow: "hidden" }}><Ec2View el={sectionElements.server} /></div>}
+      </div>
     </div>
   )
 }

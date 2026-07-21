@@ -18,6 +18,8 @@ export type Tool =
   | "aigateway"
   | "ec2"
   | "fluidcompute"
+  | "serverlesscompute"
+  | "computecomparison"
   | "requestdemo"
 
 export type ElementType =
@@ -39,6 +41,8 @@ export type ElementType =
   | "aigateway"
   | "ec2"
   | "fluidcompute"
+  | "serverlesscompute"
+  | "computecomparison"
   | "requestdemo"
 
 // A single file inside an eve agent file-tree block. Clicking its row opens the
@@ -126,6 +130,11 @@ export interface CanvasElement {
   spendStart?: number
   spendRatePerSecond?: number
   activeDutyCycle?: number
+  showRequestButton?: boolean
+  showPricing?: boolean
+  showServerTowers?: boolean
+  showContainerBorder?: boolean
+  requestScope?: string
   // sandbox terminal block (auto-spawned when the agent runs shell commands)
   sandboxParent?: string // id of the channel UI whose session this mirrors
   runs?: SandboxRun[] // captured shell activity (bash / run_command), oldest first

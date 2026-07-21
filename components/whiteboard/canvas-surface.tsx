@@ -37,6 +37,14 @@ type Gesture =
     }
   | { mode: "marquee"; startScreen: { x: number; y: number }; additive: boolean }
 
+function snapVectorTo45(x: number, y: number) {
+  const length = Math.hypot(x, y)
+  if (length === 0) return { x: 0, y: 0 }
+  const increment = Math.PI / 4
+  const angle = Math.round(Math.atan2(y, x) / increment) * increment
+  return { x: Math.cos(angle) * length, y: Math.sin(angle) * length }
+}
+
 function distToSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number) {
   const dx = x2 - x1
   const dy = y2 - y1
@@ -224,11 +232,17 @@ export function CanvasSurface() {
       } else if (g.mode === "create") {
         let w = world.x - g.start.x
         let h = world.y - g.start.y
-        // shift locks width/height equal (constrains to a square / 45° line)
         if (e.shiftKey) {
-          const size = Math.max(Math.abs(w), Math.abs(h))
-          w = Math.sign(w || 1) * size
-          h = Math.sign(h || 1) * size
+          const creating = els.find((el) => el.id === g.id)
+          if (creating?.type === "arrow" || creating?.type === "line") {
+            const snapped = snapVectorTo45(w, h)
+            w = snapped.x
+            h = snapped.y
+          } else {
+            const size = Math.max(Math.abs(w), Math.abs(h))
+            w = Math.sign(w || 1) * size
+            h = Math.sign(h || 1) * size
+          }
         }
         store.update([g.id], { width: w, height: h })
       } else if (g.mode === "move") {
@@ -264,7 +278,7 @@ export function CanvasSurface() {
           store.update([el.id], { x: g.origins[el.id].x + dx, y: g.origins[el.id].y + dy })
         }
       } else if (g.mode === "resize") {
-        handleResize(g, world, store, thr)
+        handleResize(g, world, store, thr, e.shiftKey)
       } else if (g.mode === "marquee") {
         const x = Math.min(g.startScreen.x, screen.x)
         const y = Math.min(g.startScreen.y, screen.y)
@@ -337,14 +351,22 @@ export function CanvasSurface() {
     world: { x: number; y: number },
     store: ReturnType<typeof useWhiteboard.getState>,
     thr: number,
+    lockAngle: boolean,
   ) => {
     // line endpoints
     if ((g.handle === "start" || g.handle === "end") && g.origEls.length === 1) {
       const el = g.origEls[0]
       const gx = snapToGrid(world.x, GRID_SIZE)
       const gy = snapToGrid(world.y, GRID_SIZE)
-      const px = Math.abs(gx - world.x) < SNAP_THRESHOLD ? gx : world.x
-      const py = Math.abs(gy - world.y) < SNAP_THRESHOLD ? gy : world.y
+      let px = Math.abs(gx - world.x) < SNAP_THRESHOLD ? gx : world.x
+      let py = Math.abs(gy - world.y) < SNAP_THRESHOLD ? gy : world.y
+      if (lockAngle && (el.type === "arrow" || el.type === "line")) {
+        const anchorX = g.handle === "start" ? el.x + el.width : el.x
+        const anchorY = g.handle === "start" ? el.y + el.height : el.y
+        const snapped = snapVectorTo45(px - anchorX, py - anchorY)
+        px = anchorX + snapped.x
+        py = anchorY + snapped.y
+      }
       if (g.handle === "start") {
         const endX = el.x + el.width
         const endY = el.y + el.height
@@ -390,6 +412,25 @@ export function CanvasSurface() {
       if (h.includes("n")) top = vy
       if (h.includes("s")) bottom = vy
     }
+
+    // Shift-dragging a corner preserves the original selection aspect ratio.
+    // The opposite corner stays fixed, matching standard design-tool behavior.
+    const isCorner = (h.includes("w") || h.includes("e")) && (h.includes("n") || h.includes("s"))
+    if (lockAngle && isCorner && ob.width > 0 && ob.height > 0) {
+      const width = Math.abs(right - left)
+      const height = Math.abs(bottom - top)
+      const widthScale = width / ob.width
+      const heightScale = height / ob.height
+      const scale = Math.max(widthScale, heightScale)
+      const lockedWidth = Math.max(10, ob.width * scale)
+      const lockedHeight = Math.max(10, ob.height * scale)
+      if (h.includes("w")) left = right - lockedWidth
+      else right = left + lockedWidth
+      if (h.includes("n")) top = bottom - lockedHeight
+      else bottom = top + lockedHeight
+      newGuides.length = 0
+    }
+
     setGuides(newGuides)
     const nb = {
       x: Math.min(left, right),
@@ -432,7 +473,7 @@ export function CanvasSurface() {
     if (e.button !== 0) return
 
     // creation tools
-    if (["rectangle", "ellipse", "diamond", "arrow", "line", "text", "card", "code", "terminal", "website", "server", "filetree", "aigateway", "ec2", "fluidcompute", "requestdemo"].includes(tool)) {
+    if (["rectangle", "ellipse", "diamond", "arrow", "line", "text", "card", "code", "terminal", "website", "server", "filetree", "aigateway", "ec2", "fluidcompute", "serverlesscompute", "computecomparison", "requestdemo"].includes(tool)) {
       const el = createElement(tool, world.x, world.y, {
         stroke: "#000000",
         fill: tool === "card" ? "#ffffff" : "transparent",
@@ -449,6 +490,8 @@ export function CanvasSurface() {
         tool === "aigateway" ||
         tool === "ec2" ||
         tool === "fluidcompute" ||
+        tool === "serverlesscompute" ||
+        tool === "computecomparison" ||
         tool === "requestdemo"
       if (fixedSize) {
         // place at click; these tools have a fixed default size

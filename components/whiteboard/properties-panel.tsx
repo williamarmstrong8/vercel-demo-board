@@ -503,6 +503,16 @@ export function PropertiesPanel() {
         </Row>
       </Section>
 
+      {selected.length === 1 && ["ec2", "fluidcompute", "serverlesscompute"].includes(first.type) && (
+        <Section title="Run button">
+          <Toggle
+            checked={first.showRequestButton !== false}
+            onChange={(value) => updateWithHistory(ids, { showRequestButton: value })}
+            label={first.showRequestButton !== false ? "Shown below block" : "Hidden"}
+          />
+        </Section>
+      )}
+
       {hasText && (
         <Section title="Format">
           <div className="flex items-center gap-2">

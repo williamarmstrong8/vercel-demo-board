@@ -224,6 +224,21 @@
   animation: wb-server-line 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+@keyframes wb-compute-stack-in {
+  0% {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.wb-compute-stack-in {
+  animation: wb-compute-stack-in 350ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 /* ---------- Whiteboard: sandbox scroll areas ----------
    Native scrollbars are unreliable here: on macOS (and Linux/ChromeOS Chromium)
    the OS uses overlay scrollbars that take zero layout space, auto-hide, and
