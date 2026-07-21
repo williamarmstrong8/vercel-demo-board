@@ -1953,10 +1953,12 @@ function FluidGlyph({ count, overloaded = false }: { count: number; overloaded?:
   )
 }
 
+const FLUID_BILLING_FRACTION = 116 / 216
+
 function FluidComputeView({ el }: { el: CanvasElement }) {
   const [traces, setTraces] = useState<FluidTrace[]>([])
   const [now, setNow] = useState(() => Date.now())
-  const hasActiveRequests = traces.some((trace) => now - trace.startedAt < trace.duration)
+  const hasActiveRequests = traces.some((trace) => now - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION)
   const { spend } = useIllustrativeSpend(el.spendStart ?? 3.1, el.spendRatePerSecond ?? 0.14, hasActiveRequests)
   const [usage, setUsage] = useState(0)
   const lastTick = useRef(Date.now())
@@ -1991,14 +1993,14 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
       const elapsed = (tick - lastTick.current) / 1000
       lastTick.current = tick
       setNow(tick)
-      const hasActiveWork = traces.some((trace) => tick - trace.startedAt < trace.duration)
+      const hasActiveWork = traces.some((trace) => tick - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION)
       if (hasActiveWork) setUsage((current) => current + elapsed)
       setTraces((current) => current.filter((trace) => tick - trace.startedAt < trace.duration + 500))
     }, 80)
     return () => window.clearInterval(timer)
   }, [traces])
   const instanceIds = Array.from(new Set(traces.map((trace) => trace.instance))).sort((a, b) => a - b).slice(-3)
-  const anyActive = traces.some((trace) => now - trace.startedAt < trace.duration)
+  const anyActive = traces.some((trace) => now - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION)
   return (
     <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
       <header style={{ flexShrink: 0, minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Fluid</strong><span style={{ color: "#777", fontSize: 9.5 }}>Vercel Functions</span></div><span style={{ fontFamily: "var(--font-mono)", color: "#888", fontSize: 10 }}>Usage: <b style={{ color: "#ddd", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
@@ -2006,14 +2008,15 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
         {instanceIds.length === 0 ? <div style={{ margin: "auto", color: "#555", fontFamily: "var(--font-mono)", fontSize: 9 }}>Waiting for requests</div> : instanceIds.map((instance) => {
           const row = traces.filter((trace) => trace.instance === instance)
           const latestEnd = Math.max(...row.map((trace) => trace.startedAt + trace.duration))
+          const latestBillingEnd = Math.max(...row.map((trace) => trace.startedAt + trace.duration * FLUID_BILLING_FRACTION))
           const earliestStart = Math.min(...row.map((trace) => trace.startedAt))
-          const rowUsage = Math.min(Math.max(now - earliestStart, 0), latestEnd - earliestStart) / 1000
+          const rowUsage = Math.min(Math.max(now - earliestStart, 0), latestBillingEnd - earliestStart) / 1000
           const openingProgress = Math.min(Math.max((now - earliestStart) / 350, 0), 1)
           const closingProgress = Math.min(Math.max((now - latestEnd) / 500, 0), 1)
           const lifecycleOpacity = Math.min(openingProgress, 1 - closingProgress)
           return (
             <div key={instance} style={{ flexShrink: 0, padding: "0 14px", display: "flex", flexDirection: "column", gap: 7, opacity: lifecycleOpacity, transform: `translateY(${(1 - openingProgress) * 4 - closingProgress * 4}px)`, transition: "opacity 80ms linear, transform 80ms linear" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ color: "#7d7d86", fontFamily: "var(--font-mono)", fontSize: 10.5 }}>fluid-instance-{instance + 1}</span><span style={{ display: "flex", alignItems: "center", gap: 8 }}><FluidGlyph count={row.filter((trace) => now < trace.startedAt + trace.duration).length} /><span style={{ width: 32, color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>{rowUsage.toFixed(1)}s</span></span></div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ color: "#7d7d86", fontFamily: "var(--font-mono)", fontSize: 10.5 }}>fluid-instance-{instance + 1}</span><span style={{ display: "flex", alignItems: "center", gap: 8 }}><FluidGlyph count={row.filter((trace) => now < trace.startedAt + trace.duration * FLUID_BILLING_FRACTION).length} /><span style={{ width: 32, color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>{rowUsage.toFixed(1)}s</span></span></div>
               <RequestTimeline requests={row} now={now} />
             </div>
           )
