@@ -68,7 +68,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
         type: "ec2",
         x: 60,
         y: 260,
-        overrides: { width: 410, height: 390, spendStart: 12.4, spendRatePerSecond: 0.0018 },
+        overrides: { width: 410, height: 390, spendStart: 12.4, spendRatePerSecond: 0.85 },
       },
       {
         ref: "versus",
@@ -89,7 +89,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
         type: "fluidcompute",
         x: 650,
         y: 260,
-        overrides: { width: 410, height: 390, spendStart: 3.1, spendRatePerSecond: 0.00055, activeDutyCycle: 0.42 },
+        overrides: { width: 410, height: 390, spendStart: 3.1, spendRatePerSecond: 0.24, activeDutyCycle: 0.42 },
       },
       {
         ref: "ec2-note",

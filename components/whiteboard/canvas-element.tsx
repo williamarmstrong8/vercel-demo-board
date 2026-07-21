@@ -1924,7 +1924,7 @@ function RequestTimeline({ requests, now, overloaded = false }: { requests: Demo
 }
 
 function Ec2View({ el }: { el: CanvasElement }) {
-  const { spend } = useIllustrativeSpend(el.spendStart ?? 12.4, el.spendRatePerSecond ?? 0.0018, "continuous")
+  const { spend } = useIllustrativeSpend(el.spendStart ?? 12.4, el.spendRatePerSecond ?? 0.85, "continuous")
   const requests = useDemoRequests()
   const [startedAt, setStartedAt] = useState(() => Date.now())
   const [now, setNow] = useState(() => Date.now())
@@ -1968,7 +1968,7 @@ function FluidGlyph({ count, overloaded = false }: { count: number; overloaded?:
 }
 
 function FluidComputeView({ el }: { el: CanvasElement }) {
-  const { spend } = useIllustrativeSpend(el.spendStart ?? 3.1, el.spendRatePerSecond ?? 0.00055, "bursts", el.activeDutyCycle ?? 0.42)
+  const { spend } = useIllustrativeSpend(el.spendStart ?? 3.1, el.spendRatePerSecond ?? 0.24, "bursts", el.activeDutyCycle ?? 0.42)
   const [traces, setTraces] = useState<FluidTrace[]>([])
   const [now, setNow] = useState(() => Date.now())
   const [usage, setUsage] = useState(0)
