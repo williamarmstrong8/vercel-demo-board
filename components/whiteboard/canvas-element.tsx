@@ -1860,13 +1860,28 @@ function useDemoRequests() {
   return requests
 }
 
+function dispatchDemoRequest() {
+  const id = ++requestSequence
+  const request: DemoRequest = { id, color: REQUEST_COLORS[(id - 1) % REQUEST_COLORS.length], startedAt: Date.now(), duration: 4600 }
+  window.dispatchEvent(new CustomEvent(REQUEST_EVENT, { detail: request }))
+}
+
+const requestControlStyle: React.CSSProperties = { pointerEvents: "auto", display: "inline-flex", alignItems: "center", justifyContent: "center", height: 30, borderRadius: 9999, border: "1px solid rgba(255,255,255,0.14)", background: "#000000", color: "#ffffff", fontFamily: "var(--font-sans)", cursor: "pointer", boxShadow: "none" }
+
+function RunRequestButton() {
+  return <button type="button" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); dispatchDemoRequest() }} style={{ ...requestControlStyle, gap: 6, padding: "0 14px", fontSize: 13, fontWeight: 500, whiteSpace: "nowrap" }}><Play size={13} fill="currentColor" />Run request</button>
+}
+
+function ComputeCardShell({ el, children }: { el: CanvasElement; children: React.ReactNode }) {
+  const showControl = el.showRequestButton !== false
+  return <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: showControl ? 10 : 0 }}>{<div style={{ width: "100%", minHeight: 0, flex: 1 }}>{children}</div>}{showControl && <RunRequestButton />}</div>
+}
+
 function RequestDemoView({ el }: { el: CanvasElement }) {
   const [sent, setSent] = useState(0)
   const run = (event: React.MouseEvent) => {
     event.stopPropagation()
-    const id = ++requestSequence
-    const request: DemoRequest = { id, color: REQUEST_COLORS[(id - 1) % REQUEST_COLORS.length], startedAt: Date.now(), duration: 4600 }
-    window.dispatchEvent(new CustomEvent(REQUEST_EVENT, { detail: request }))
+    dispatchDemoRequest()
     setSent((count) => count + 1)
   }
   const reset = (event: React.MouseEvent) => {
@@ -1875,7 +1890,6 @@ function RequestDemoView({ el }: { el: CanvasElement }) {
     setSent(0)
     window.dispatchEvent(new Event(RESET_REQUEST_EVENT))
   }
-  const controlStyle: React.CSSProperties = { pointerEvents: "auto", display: "inline-flex", alignItems: "center", justifyContent: "center", height: 30, borderRadius: 9999, border: "1px solid rgba(255,255,255,0.14)", background: "#000000", color: "#ffffff", fontFamily: "var(--font-sans)", cursor: "pointer", boxShadow: "none" }
   return (
     <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, fontFamily: "var(--font-sans)" }}>
       <div style={{ width: "100%", flex: 1, border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: computeToken.surface, color: computeToken.text, padding: "12px 15px", display: "flex", alignItems: "center", gap: 12 }}>
@@ -1884,8 +1898,8 @@ function RequestDemoView({ el }: { el: CanvasElement }) {
         <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: computeToken.textMuted }}>{sent} sent</span>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <button type="button" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onClick={run} style={{ ...controlStyle, gap: 6, padding: "0 14px", fontSize: 13, fontWeight: 500, whiteSpace: "nowrap" }}><Play size={13} fill="currentColor" />Run request</button>
-        {sent > 0 && <button type="button" title="Reset requests" aria-label="Reset requests" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onClick={reset} style={{ ...controlStyle, width: 30 }}><RotateCw size={14} /></button>}
+        <button type="button" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onClick={run} style={{ ...requestControlStyle, gap: 6, padding: "0 14px", fontSize: 13, fontWeight: 500, whiteSpace: "nowrap" }}><Play size={13} fill="currentColor" />Run request</button>
+        {sent > 0 && <button type="button" title="Reset requests" aria-label="Reset requests" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onClick={reset} style={{ ...requestControlStyle, width: 30 }}><RotateCw size={14} /></button>}
       </div>
     </div>
   )
@@ -1925,6 +1939,7 @@ function Ec2View({ el }: { el: CanvasElement }) {
   const usage = (now - startedAt) / 1000
   const overloaded = requests.length > 3
   return (
+    <ComputeCardShell el={el}>
     <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
       <header style={{ flexShrink: 0, minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Server</strong><span style={{ fontSize: 9.5, color: "#777" }}>Amazon EC2 · always on</span></div><span style={{ color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>Usage: <b style={{ color: "#ededed", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
       <div style={{ minHeight: 0, flex: 1, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
@@ -1941,6 +1956,7 @@ function Ec2View({ el }: { el: CanvasElement }) {
       </div>
       <footer style={{ flexShrink: 0, padding: "11px 16px 13px", borderTop: "1px solid #202020", display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel="one always-on server" /></footer>
     </div>
+    </ComputeCardShell>
   )
 }
 
@@ -2004,6 +2020,7 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
   const instanceIds = Array.from(new Set(traces.map((trace) => trace.instance))).sort((a, b) => a - b).slice(-3)
   const anyActive = traces.some((trace) => now - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION)
   return (
+    <ComputeCardShell el={el}>
     <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
       <header style={{ flexShrink: 0, minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Fluid</strong><span style={{ color: "#777", fontSize: 9.5 }}>Vercel Functions</span></div><span style={{ fontFamily: "var(--font-mono)", color: "#888", fontSize: 10 }}>Usage: <b style={{ color: "#ddd", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
       <div style={{ minHeight: 0, flex: 1, overflow: "hidden", padding: "12px 0", display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 12 }}>
@@ -2026,6 +2043,7 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
       </div>
       <footer style={{ flexShrink: 0, padding: "11px 16px 13px", borderTop: "1px solid #202020", display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel={anyActive ? "active compute spend" : "spend paused"} /></footer>
     </div>
+    </ComputeCardShell>
   )
 }
 
@@ -2068,6 +2086,7 @@ function ServerlessComputeView({ el }: { el: CanvasElement }) {
   }, [traces])
   const visibleTraces = traces.slice(-3)
   return (
+    <ComputeCardShell el={el}>
     <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
       <header style={{ flexShrink: 0, minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Serverless</strong><span style={{ color: "#777", fontSize: 9.5 }}>One request per instance</span></div><span style={{ fontFamily: "var(--font-mono)", color: "#888", fontSize: 10 }}>Usage: <b style={{ color: "#ddd", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
       <div style={{ minHeight: 0, flex: 1, overflow: "hidden", padding: "12px 0", display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 12 }}>
@@ -2089,6 +2108,7 @@ function ServerlessComputeView({ el }: { el: CanvasElement }) {
       </div>
       <footer style={{ flexShrink: 0, padding: "11px 16px 13px", borderTop: "1px solid #202020", display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel={hasActiveRequests ? "active compute spend" : "spend paused"} /></footer>
     </div>
+    </ComputeCardShell>
   )
 }
 

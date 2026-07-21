@@ -128,6 +128,7 @@ export interface CanvasElement {
   spendStart?: number
   spendRatePerSecond?: number
   activeDutyCycle?: number
+  showRequestButton?: boolean
   // sandbox terminal block (auto-spawned when the agent runs shell commands)
   sandboxParent?: string // id of the channel UI whose session this mirrors
   runs?: SandboxRun[] // captured shell activity (bash / run_command), oldest first
