@@ -53,6 +53,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           text: "EC2 → Vercel Functions with Fluid compute",
           fontSize: 30,
           bold: true,
+          textAlign: "center",
         },
       },
       {
