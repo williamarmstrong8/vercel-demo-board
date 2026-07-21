@@ -1837,7 +1837,8 @@ function SpendDisplay({ amount, rateLabel }: { amount: number; rateLabel: string
 
 type DemoRequest = { id: number; color: string; startedAt: number; duration: number }
 const REQUEST_EVENT = "v0-compute-demo-request"
-const REQUEST_COLORS = ["#8b5cf6", "#06b6d4", "#f59e0b", "#ec4899", "#3b82f6"]
+const REQUEST_COLORS = ["#d946ef", "#14b8a6", "#2563eb", "#f59e0b"]
+const FLUID_WORK_COLORS = ["#5b102b", "#18544d", "#173d78", "#71470b"]
 let requestSequence = 0
 
 function useDemoRequests() {
@@ -1923,44 +1924,69 @@ function Ec2View({ el }: { el: CanvasElement }) {
   )
 }
 
+type FluidTrace = DemoRequest & { instance: number }
+
+function FluidGlyph({ active }: { active: boolean }) {
+  return (
+    <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+      <span style={{ display: "flex", gap: 2 }}>{[0, 1, 2, 3].map((bar) => <i key={bar} style={{ width: 2, height: 12, borderRadius: 99, background: active && bar < 2 ? "#ededed" : "#444" }} />)}</span>
+      <span style={{ width: 15, height: 15, border: "2px solid #737373", borderRadius: "45%", display: "grid", placeItems: "center", color: "#737373", fontSize: 8, fontWeight: 700 }}>✣</span>
+    </span>
+  )
+}
+
 function FluidComputeView({ el }: { el: CanvasElement }) {
   const { spend } = useIllustrativeSpend(el.spendStart ?? 3.1, el.spendRatePerSecond ?? 0.00055, "bursts", el.activeDutyCycle ?? 0.42)
-  const requests = useDemoRequests()
-  const active = requests.length > 0
+  const [traces, setTraces] = useState<FluidTrace[]>([])
+  const [now, setNow] = useState(() => Date.now())
   const [usage, setUsage] = useState(0)
   const lastTick = useRef(Date.now())
   useEffect(() => {
+    const receive = (event: Event) => {
+      const request = (event as CustomEvent<DemoRequest>).detail
+      setTraces((current) => {
+        const activeByInstance = new Map<number, number>()
+        current.filter((trace) => request.startedAt - trace.startedAt < trace.duration).forEach((trace) => activeByInstance.set(trace.instance, (activeByInstance.get(trace.instance) ?? 0) + 1))
+        let instance = 0
+        while ((activeByInstance.get(instance) ?? 0) >= 3) instance += 1
+        return [...current.slice(-11), { ...request, instance }]
+      })
+    }
+    window.addEventListener(REQUEST_EVENT, receive)
+    return () => window.removeEventListener(REQUEST_EVENT, receive)
+  }, [])
+  useEffect(() => {
     const timer = window.setInterval(() => {
-      const now = Date.now()
-      const elapsed = (now - lastTick.current) / 1000
-      lastTick.current = now
-      if (active) setUsage((current) => current + elapsed * requests.length)
-    }, 100)
+      const tick = Date.now()
+      const elapsed = (tick - lastTick.current) / 1000
+      lastTick.current = tick
+      setNow(tick)
+      const activeCount = traces.filter((trace) => tick - trace.startedAt < trace.duration).length
+      if (activeCount) setUsage((current) => current + elapsed * activeCount)
+    }, 80)
     return () => window.clearInterval(timer)
-  }, [active, requests.length])
-  const instanceCount = Math.ceil(requests.length / 3)
+  }, [traces])
+  const instanceIds = Array.from(new Set(traces.map((trace) => trace.instance))).sort((a, b) => a - b)
+  const anyActive = traces.some((trace) => now - trace.startedAt < trace.duration)
   return (
-    <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: computeToken.surface, color: computeToken.text, overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
-      <header style={{ minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${computeToken.border}` }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Vercel Functions</strong><span style={{ fontSize: 9.5, color: computeToken.textMuted }}>Fluid compute</span></div><span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: computeToken.textMuted }}>Usage: {usage.toFixed(1)}s</span></header>
-      <div style={{ flex: 1, padding: "16px 15px", display: "flex", flexDirection: "column", gap: 13 }}>
-        {!active ? (
-          <div style={{ margin: "auto", maxWidth: 230, textAlign: "center", color: computeToken.textMuted, display: "flex", flexDirection: "column", alignItems: "center", gap: 7 }}><span style={{ width: 8, height: 8, borderRadius: 99, background: computeToken.borderStrong }} /><strong style={{ color: computeToken.textSecondary, fontSize: 11 }}>No active instances</strong><span style={{ fontSize: 9.5, lineHeight: 1.4 }}>Run a request to create the first Fluid instance.</span></div>
-        ) : (
-          Array.from({ length: instanceCount }, (_, instance) => {
-            const row = requests.slice(instance * 3, instance * 3 + 3)
-            return (
-              <div key={instance} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}><span style={{ fontFamily: "var(--font-mono)", color: computeToken.textSecondary }}>fluid-instance-{instance + 1}</span><span style={{ color: computeToken.textMuted }}>{row.length} active</span></div>
-                <div style={{ minHeight: 43, borderRadius: 7, background: "oklch(0.18 0 0)", padding: 6, display: "flex", flexDirection: "column", gap: 4 }}>
-                  {row.map((request, index) => <i key={request.id} style={{ height: 6, marginLeft: `${index * 10}%`, width: `${94 - index * 10}%`, borderRadius: 99, background: request.color }} />)}
-                </div>
+    <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
+      <header style={{ minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 17 }}>▧</span><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Fluid</strong><span style={{ color: "#777", fontSize: 9.5 }}>Vercel Functions</span></div></div><span style={{ fontFamily: "var(--font-mono)", color: "#888", fontSize: 10 }}>Usage: <b style={{ color: "#ddd", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
+      <div style={{ flex: 1, padding: "14px 0", display: "flex", flexDirection: "column", gap: 14 }}>
+        {instanceIds.length === 0 ? <div style={{ margin: "auto", color: "#555", fontFamily: "var(--font-mono)", fontSize: 9 }}>Waiting for requests</div> : instanceIds.map((instance) => {
+          const row = traces.filter((trace) => trace.instance === instance)
+          const activeRow = row.filter((trace) => now - trace.startedAt < trace.duration)
+          const rowUsage = row.reduce((total, trace) => total + Math.min(Math.max(now - trace.startedAt, 0), trace.duration), 0) / 1000
+          return (
+            <div key={instance} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ padding: "0 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ color: "#7d7d86", fontFamily: "var(--font-mono)", fontSize: 10.5 }}>fluid-instance-{instance + 1}</span><span style={{ display: "flex", alignItems: "center", gap: 8 }}><FluidGlyph active={activeRow.length > 0} /><span style={{ width: 32, color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>{rowUsage.toFixed(1)}s</span></span></div>
+              <div style={{ position: "relative", minHeight: Math.max(31, row.length * 7 + 8), background: "#111", borderRadius: "0 7px 7px 0", overflow: "hidden" }}>
+                {row.map((trace, index) => { const progress = Math.min(Math.max((now - trace.startedAt) / trace.duration, 0), 1); const width = Math.max(4, progress * (86 - index * 3)); return <i key={trace.id} style={{ position: "absolute", top: 5 + index * 7, left: `${8 + index * 5}%`, width: `${width}%`, height: 5, borderRadius: 99, background: FLUID_WORK_COLORS[(trace.id - 1) % FLUID_WORK_COLORS.length], opacity: progress === 1 ? 0.72 : 1, transition: "width 80ms linear" }} /> })}
               </div>
-            )
-          })
-        )}
-        {active && <p style={{ margin: "auto 0 0", color: computeToken.textMuted, fontSize: 10, lineHeight: 1.4, textAlign: "center" }}>Up to three concurrent requests reuse each warm instance.</p>}
+            </div>
+          )
+        })}
       </div>
-      <footer style={{ padding: "11px 16px 13px", borderTop: `1px solid ${computeToken.border}`, display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel={active ? "active compute spend" : "spend paused"} /></footer>
+      <footer style={{ padding: "11px 16px 13px", borderTop: "1px solid #202020", display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel={anyActive ? "active compute spend" : "spend paused"} /></footer>
     </div>
   )
 }
