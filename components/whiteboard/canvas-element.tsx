@@ -1930,6 +1930,13 @@ function Ec2View({ el }: { el: CanvasElement }) {
     <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
       <header style={{ flexShrink: 0, minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Server</strong><span style={{ fontSize: 9.5, color: "#777" }}>Amazon EC2 · always on</span></div><span style={{ color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>Usage: <b style={{ color: "#ededed", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
       <div style={{ minHeight: 0, flex: 1, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div aria-label="Two provisioned server towers" style={{ display: "flex", gap: 8 }}>
+          {[0, 1].map((tower) => (
+            <div key={tower} style={{ flex: 1, padding: 6, border: "1px solid #252525", borderRadius: 7, background: "#0a0a0a", display: "flex", flexDirection: "column", gap: 4 }}>
+              {[0, 1].map((unit) => <RackUnit key={unit} accent={overloaded ? "#ef2b2d" : "#3f7fff"} active={requests.length > 0} pulse={requests.length > 0} />)}
+            </div>
+          ))}
+        </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", color: overloaded ? "#ef2b2d" : "#8b8b95", fontSize: 10 }}><span style={{ fontFamily: "var(--font-mono)" }}>vps</span><span style={{ display: "flex", alignItems: "center", gap: 9 }}><span>{overloaded ? "CPU Slow Down" : "CPU Ready"}</span><FluidGlyph count={requests.length} overloaded={overloaded} /><span>{overloaded ? "Overloaded" : "Always on"}</span></span></div>
         <RequestTimeline requests={requests} now={now} overloaded={overloaded} />
         <p style={{ margin: "auto 0 0", color: overloaded ? "#ef2b2d" : "#666", fontSize: 9.5, textAlign: "center" }}>{overloaded ? "Capacity exceeded — requests are slowing down." : "One provisioned server handles up to three concurrent requests."}</p>
