@@ -196,6 +196,20 @@ export function createElement(
         strokeWidth: 1,
         rounded: true,
       }
+    case "containerbackend":
+      return {
+        ...base,
+        type: "containerbackend",
+        width: 440,
+        height: 380,
+        title: "Vercel Containers",
+        containerStatus: "ready",
+        containerReplicas: 0,
+        fill: "#0a0a0a",
+        stroke: "#2e2e2e",
+        strokeWidth: 1,
+        rounded: true,
+      }
     case "requestdemo":
       return {
         ...base,

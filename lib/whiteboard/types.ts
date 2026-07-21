@@ -20,6 +20,7 @@ export type Tool =
   | "fluidcompute"
   | "serverlesscompute"
   | "computecomparison"
+  | "containerbackend"
   | "requestdemo"
 
 export type ElementType =
@@ -43,6 +44,7 @@ export type ElementType =
   | "fluidcompute"
   | "serverlesscompute"
   | "computecomparison"
+  | "containerbackend"
   | "requestdemo"
 
 // A single file inside an eve agent file-tree block. Clicking its row opens the
@@ -135,6 +137,9 @@ export interface CanvasElement {
   showServerTowers?: boolean
   showContainerBorder?: boolean
   requestScope?: string
+  // Vercel Containers block lifecycle; values are illustrative UI state.
+  containerStatus?: "ready" | "building" | "publishing" | "running"
+  containerReplicas?: number
   // sandbox terminal block (auto-spawned when the agent runs shell commands)
   sandboxParent?: string // id of the channel UI whose session this mirrors
   runs?: SandboxRun[] // captured shell activity (bash / run_command), oldest first

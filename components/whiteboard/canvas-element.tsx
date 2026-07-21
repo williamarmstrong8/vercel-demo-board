@@ -1,7 +1,7 @@
 "use client"
 
 import { memo, useState, useLayoutEffect, useEffect, useRef, useMemo } from "react"
-import { Play, Loader2, Check, RotateCw, Lock, ChevronDown, ChevronRight, Folder, FileText, SquareTerminal, ExternalLink, Waypoints, Server, Send, Zap } from "lucide-react"
+import { Play, Loader2, Check, RotateCw, Lock, ChevronDown, ChevronRight, Folder, FileText, SquareTerminal, ExternalLink, Waypoints, Server, Send, Zap, Container, Box, Rocket } from "lucide-react"
 import type { AgentFile, CanvasElement, RunPhase } from "@/lib/whiteboard/types"
 import { getBounds } from "@/lib/whiteboard/geometry"
 import { getCodeTheme, tokenizeLine } from "@/lib/whiteboard/code-themes"
@@ -824,6 +824,8 @@ function renderContent(el: CanvasElement, b: { width: number; height: number }, 
   return <ServerlessComputeView el={el} />
   case "computecomparison":
   return <ComputeComparisonView el={el} />
+  case "containerbackend":
+  return <ContainerBackendView el={el} />
   case "requestdemo":
   return <RequestDemoView el={el} />
   case "image":
@@ -2142,6 +2144,57 @@ function ServerlessComputeView({ el }: { el: CanvasElement }) {
       {el.showPricing !== false && <footer style={{ flexShrink: 0, padding: "11px 16px 13px", borderTop: "1px solid #202020", display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel={activeInstanceCount > 0 ? "active compute spend" : "spend paused"} /></footer>}
     </div>
     </ComputeCardShell>
+  )
+}
+
+function ContainerBackendView({ el }: { el: CanvasElement }) {
+  const update = useWhiteboard((s) => s.update)
+  const status = el.containerStatus ?? "ready"
+  const replicas = el.containerReplicas ?? 0
+  const timers = useRef<number[]>([])
+
+  useEffect(() => () => timers.current.forEach(window.clearTimeout), [])
+
+  const deploy = () => {
+    if (status === "building" || status === "publishing") return
+    timers.current.forEach(window.clearTimeout)
+    timers.current = []
+    update([el.id], { containerStatus: "building", containerReplicas: 0 })
+    timers.current.push(window.setTimeout(() => update([el.id], { containerStatus: "publishing" }), 850))
+    timers.current.push(window.setTimeout(() => update([el.id], { containerStatus: "running", containerReplicas: 1 }), 1650))
+    timers.current.push(window.setTimeout(() => update([el.id], { containerReplicas: 2 }), 2350))
+  }
+
+  const stageIndex = status === "ready" ? -1 : status === "building" ? 0 : status === "publishing" ? 1 : 2
+  const statusLabel = status === "ready" ? "Ready" : status === "building" ? "Building" : status === "publishing" ? "Publishing" : "Running"
+  const stages = [
+    { label: "Build", detail: "Dockerfile.vercel", icon: Container },
+    { label: "Registry", detail: "OCI image", icon: Box },
+    { label: "Service", detail: "Autoscaled backend", icon: Rocket },
+  ]
+
+  return (
+    <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
+      <header style={{ flexShrink: 0, minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Vercel Containers</strong><span style={{ color: "#777", fontSize: 9.5 }}>Docker / OCI backend</span></div>
+        <span style={{ display: "flex", alignItems: "center", gap: 7, color: status === "running" ? "#63d791" : "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>{status !== "ready" && status !== "running" && <Loader2 size={11} className="animate-spin" />}{statusLabel}</span>
+      </header>
+      <div style={{ minHeight: 0, flex: 1, padding: "16px", display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ display: "flex", gap: 7 }}>
+          {stages.map((stage, index) => {
+            const active = index <= stageIndex
+            const current = index === stageIndex && status !== "running"
+            const Icon = stage.icon
+            return <div key={stage.label} className={active ? "wb-compute-stack-in" : undefined} style={{ minWidth: 0, flex: 1, padding: "11px 10px", border: `1px solid ${active ? "#3b3b3b" : "#242424"}`, borderRadius: 8, background: active ? "#111" : "#0a0a0a", display: "flex", flexDirection: "column", gap: 8, transition: "border-color 180ms ease, background 180ms ease" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}><Icon size={14} color={active ? "#ededed" : "#555"} strokeWidth={1.6} />{active && (current ? <Loader2 size={11} className="animate-spin" color="#888" /> : <Check size={11} color="#63d791" strokeWidth={2.2} />)}</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 11.5, fontWeight: 550, color: active ? "#ededed" : "#777" }}>{stage.label}</strong><span style={{ overflow: "hidden", color: "#686868", fontFamily: "var(--font-mono)", fontSize: 8.5, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{stage.detail}</span></div>
+            </div>
+          })}
+        </div>
+        {status === "running" && <div key={replicas} className="wb-compute-stack-in" style={{ padding: "11px 12px", border: "1px solid #252525", borderRadius: 8, background: "#0a0a0a", display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ display: "flex", alignItems: "center", gap: 8, color: "#a4a4aa", fontSize: 10.5 }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: "#63d791" }} />service.vercel.app</span><span style={{ display: "flex", gap: 14, color: "#777", fontFamily: "var(--font-mono)", fontSize: 9.5 }}><span>PORT 3000</span><span>{replicas} replicas</span></span></div>}
+        <div style={{ marginTop: "auto", display: "flex", justifyContent: "flex-end" }}><button type="button" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onClick={deploy} disabled={status === "building" || status === "publishing"} style={{ ...requestControlStyle, cursor: status === "building" || status === "publishing" ? "wait" : "pointer", opacity: status === "building" || status === "publishing" ? 0.65 : 1 }} aria-label={status === "running" ? "Redeploy container backend" : "Deploy container backend"}>{status === "building" || status === "publishing" ? <Loader2 size={13} className="animate-spin" /> : <Rocket size={13} />}<span>{status === "running" ? "Redeploy" : "Deploy"}</span></button></div>
+      </div>
+    </div>
   )
 }
 

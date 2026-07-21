@@ -15,6 +15,7 @@ import {
   Square,
   HardDrive,
   FunctionSquare,
+  Container,
   Send,
 } from "lucide-react"
 import { useWhiteboard } from "@/lib/whiteboard/store"
@@ -117,6 +118,14 @@ const ITEMS: LibraryItem[] = [
     category: "deploy-scale",
   },
   {
+    id: "containerbackend",
+    icon: Container,
+    label: "Vercel Containers",
+    description: "Build and deploy a Docker or OCI backend on Vercel.",
+    keywords: ["vercel", "container", "containers", "docker", "dockerfile", "oci", "backend", "registry", "service"],
+    category: "deploy-scale",
+  },
+  {
     id: "filetree",
     icon: FolderTree,
     label: "eve agent",
@@ -146,6 +155,7 @@ const NODE_ICONS: Partial<Record<ElementType, React.ComponentType<{ className?: 
   fluidcompute: FunctionSquare,
   serverlesscompute: FunctionSquare,
   computecomparison: Blocks,
+  containerbackend: Container,
   requestdemo: Send,
 }
 
@@ -352,7 +362,7 @@ export function ComponentLibrary() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={onInputKeyDown}
-                placeholder="Search components and templates…"
+                placeholder="Search components and templates���"
                 className="h-6 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
               />
               <button
