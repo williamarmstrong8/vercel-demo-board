@@ -1837,6 +1837,7 @@ function SpendDisplay({ amount, rateLabel }: { amount: number; rateLabel: string
 
 type DemoRequest = { id: number; color: string; startedAt: number; duration: number }
 const REQUEST_EVENT = "v0-compute-demo-request"
+const RESET_REQUEST_EVENT = "v0-compute-demo-reset"
 const REQUEST_COLORS = ["#d946ef", "#14b8a6", "#2563eb", "#f59e0b"]
 const FLUID_WORK_COLORS = ["#5b102b", "#18544d", "#173d78", "#71470b"]
 let requestSequence = 0
@@ -1848,10 +1849,13 @@ function useDemoRequests() {
       const request = (event as CustomEvent<DemoRequest>).detail
       setRequests((current) => [...current.slice(-7), request])
     }
+    const reset = () => setRequests([])
     window.addEventListener(REQUEST_EVENT, receive)
+    window.addEventListener(RESET_REQUEST_EVENT, reset)
     const cleanup = window.setInterval(() => setRequests((current) => current.filter((request) => Date.now() - request.startedAt < request.duration)), 120)
     return () => {
       window.removeEventListener(REQUEST_EVENT, receive)
+      window.removeEventListener(RESET_REQUEST_EVENT, reset)
       window.clearInterval(cleanup)
     }
   }, [])
@@ -1869,7 +1873,9 @@ function RequestDemoView({ el }: { el: CanvasElement }) {
   }
   const reset = (event: React.MouseEvent) => {
     event.stopPropagation()
+    requestSequence = 0
     setSent(0)
+    window.dispatchEvent(new Event(RESET_REQUEST_EVENT))
   }
   const controlStyle: React.CSSProperties = { pointerEvents: "auto", display: "inline-flex", alignItems: "center", justifyContent: "center", height: 30, borderRadius: 9999, border: "1px solid rgba(255,255,255,0.14)", background: "#000000", color: "#ffffff", fontFamily: "var(--font-sans)", cursor: "pointer", boxShadow: "none" }
   return (
@@ -1910,8 +1916,13 @@ function RequestTimeline({ requests, now, overloaded = false }: { requests: Demo
 function Ec2View({ el }: { el: CanvasElement }) {
   const { spend } = useIllustrativeSpend(el.spendStart ?? 12.4, el.spendRatePerSecond ?? 0.0018, "continuous")
   const requests = useDemoRequests()
-  const [startedAt] = useState(() => Date.now())
+  const [startedAt, setStartedAt] = useState(() => Date.now())
   const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const reset = () => { const tick = Date.now(); setStartedAt(tick); setNow(tick) }
+    window.addEventListener(RESET_REQUEST_EVENT, reset)
+    return () => window.removeEventListener(RESET_REQUEST_EVENT, reset)
+  }, [])
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 80); return () => window.clearInterval(timer) }, [])
   const usage = (now - startedAt) / 1000
   const overloaded = requests.length > 3
@@ -1931,10 +1942,10 @@ function Ec2View({ el }: { el: CanvasElement }) {
 type FluidTrace = DemoRequest & { instance: number }
 
 function FluidGlyph({ count, overloaded = false }: { count: number; overloaded?: boolean }) {
-  const slots = Math.max(4, count)
+  const visibleCount = Math.min(count, 4)
   return (
     <span aria-label={`${count} active request${count === 1 ? "" : "s"}`} style={{ display: "flex", alignItems: "center", gap: 2 }}>
-      {Array.from({ length: slots }, (_, bar) => <i key={bar} style={{ width: 2, height: 12, borderRadius: 99, background: bar < count ? (overloaded ? "#ef2b2d" : "#ededed") : "#444" }} />)}
+      {Array.from({ length: 4 }, (_, bar) => <i key={bar} style={{ width: 2, height: 12, borderRadius: 99, background: bar < visibleCount ? (overloaded ? "#ef2b2d" : "#ededed") : "#444" }} />)}
     </span>
   )
 }
@@ -1956,8 +1967,19 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
         return [...current.slice(-11), { ...request, instance }]
       })
     }
+    const reset = () => {
+      setTraces([])
+      setUsage(0)
+      const tick = Date.now()
+      setNow(tick)
+      lastTick.current = tick
+    }
     window.addEventListener(REQUEST_EVENT, receive)
-    return () => window.removeEventListener(REQUEST_EVENT, receive)
+    window.addEventListener(RESET_REQUEST_EVENT, reset)
+    return () => {
+      window.removeEventListener(REQUEST_EVENT, receive)
+      window.removeEventListener(RESET_REQUEST_EVENT, reset)
+    }
   }, [])
   useEffect(() => {
     const timer = window.setInterval(() => {
