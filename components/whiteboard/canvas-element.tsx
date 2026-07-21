@@ -1885,17 +1885,12 @@ function RequestTimeline({ requests, now, overloaded = false }: { requests: Demo
       {requests.length === 0 && <span style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#555", fontFamily: "var(--font-mono)", fontSize: 8.5 }}>idle capacity</span>}
       {requests.map((request, index) => {
         const progress = Math.min(Math.max((now - request.startedAt) / request.duration, 0), 1)
-        const growthEnd = 0.68
-        const exitProgress = Math.min(Math.max((progress - growthEnd) / (1 - growthEnd), 0), 1)
-        const traceWidth = Math.min(progress / growthEnd, 1) * 88
-        const traceLeft = 100 - traceWidth - exitProgress * 34
-        const endWidth = Math.min(traceWidth / 5, 17.6)
-        const middleWidth = Math.max(0, traceWidth - endWidth * 2)
+        const traceLeft = 100 - progress * 188
         return (
-          <span key={request.id} style={{ position: "absolute", top: 7 + index * 8, left: 0, width: "100%", height: 5, opacity: 1 - exitProgress, transition: "opacity 80ms linear" }}>
-            <i style={{ position: "absolute", left: `${traceLeft}%`, width: `${endWidth}%`, height: "100%", borderRadius: 99, background: request.color }} />
-            <i style={{ position: "absolute", left: `${traceLeft + endWidth}%`, width: `${middleWidth}%`, height: "100%", borderRadius: 99, background: request.color, opacity: 0.3 }} />
-            <i style={{ position: "absolute", left: `${traceLeft + endWidth + middleWidth}%`, width: `${endWidth}%`, height: "100%", borderRadius: 99, background: request.color }} />
+          <span key={request.id} style={{ position: "absolute", top: 7 + index * 8, left: `${traceLeft}%`, width: "88%", height: 5, display: "flex", transition: "left 80ms linear" }}>
+            <i style={{ width: "20%", height: "100%", flexShrink: 0, borderRadius: "99px 0 0 99px", background: request.color }} />
+            <i style={{ width: "60%", height: "100%", flexShrink: 0, background: request.color, opacity: 0.3 }} />
+            <i style={{ width: "20%", height: "100%", flexShrink: 0, borderRadius: "0 99px 99px 0", background: request.color }} />
           </span>
         )
       })}
