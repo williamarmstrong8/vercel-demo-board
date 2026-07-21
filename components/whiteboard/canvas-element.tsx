@@ -1911,7 +1911,7 @@ function Ec2View({ el }: { el: CanvasElement }) {
     <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
       <header style={{ flexShrink: 0, minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", alignItems: "center", gap: 9 }}><span style={{ fontSize: 18 }}>▣</span><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Server</strong><span style={{ fontSize: 9.5, color: "#777" }}>Amazon EC2 · always on</span></div></div><span style={{ color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>Usage: <b style={{ color: "#ededed", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
       <div style={{ minHeight: 0, flex: 1, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", color: overloaded ? "#ef2b2d" : "#8b8b95", fontSize: 10 }}><span style={{ fontFamily: "var(--font-mono)" }}>vps</span><span style={{ display: "flex", alignItems: "center", gap: 9 }}><span>{overloaded ? "CPU Slow Down" : "CPU Ready"}</span><FluidGlyph active={requests.length > 0} /><span>{overloaded ? "Overloaded" : "Always on"}</span></span></div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", color: overloaded ? "#ef2b2d" : "#8b8b95", fontSize: 10 }}><span style={{ fontFamily: "var(--font-mono)" }}>vps</span><span style={{ display: "flex", alignItems: "center", gap: 9 }}><span>{overloaded ? "CPU Slow Down" : "CPU Ready"}</span><FluidGlyph count={requests.length} overloaded={overloaded} /><span>{overloaded ? "Overloaded" : "Always on"}</span></span></div>
         <RequestTimeline requests={requests} now={now} overloaded={overloaded} />
         <p style={{ margin: "auto 0 0", color: overloaded ? "#ef2b2d" : "#666", fontSize: 9.5, textAlign: "center" }}>{overloaded ? "Capacity exceeded — requests are slowing down." : "One provisioned server handles up to three concurrent requests."}</p>
       </div>
@@ -1922,11 +1922,11 @@ function Ec2View({ el }: { el: CanvasElement }) {
 
 type FluidTrace = DemoRequest & { instance: number }
 
-function FluidGlyph({ active }: { active: boolean }) {
+function FluidGlyph({ count, overloaded = false }: { count: number; overloaded?: boolean }) {
+  const slots = Math.max(4, count)
   return (
-    <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
-      <span style={{ display: "flex", gap: 2 }}>{[0, 1, 2, 3].map((bar) => <i key={bar} style={{ width: 2, height: 12, borderRadius: 99, background: active && bar < 2 ? "#ededed" : "#444" }} />)}</span>
-      <span style={{ width: 15, height: 15, border: "2px solid #737373", borderRadius: "45%", display: "grid", placeItems: "center", color: "#737373", fontSize: 8, fontWeight: 700 }}>✣</span>
+    <span aria-label={`${count} active request${count === 1 ? "" : "s"}`} style={{ display: "flex", alignItems: "center", gap: 2 }}>
+      {Array.from({ length: slots }, (_, bar) => <i key={bar} style={{ width: 2, height: 12, borderRadius: 99, background: bar < count ? (overloaded ? "#ef2b2d" : "#ededed") : "#444" }} />)}
     </span>
   )
 }
@@ -1977,10 +1977,9 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
           const openingProgress = Math.min(Math.max((now - earliestStart) / 350, 0), 1)
           const closingProgress = Math.min(Math.max((now - latestEnd) / 500, 0), 1)
           const lifecycleOpacity = Math.min(openingProgress, 1 - closingProgress)
-          const rowActive = row.some((trace) => now < trace.startedAt + trace.duration)
           return (
             <div key={instance} style={{ flexShrink: 0, padding: "0 14px", display: "flex", flexDirection: "column", gap: 7, opacity: lifecycleOpacity, transform: `translateY(${(1 - openingProgress) * 4 - closingProgress * 4}px)`, transition: "opacity 80ms linear, transform 80ms linear" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ color: "#7d7d86", fontFamily: "var(--font-mono)", fontSize: 10.5 }}>fluid-instance-{instance + 1}</span><span style={{ display: "flex", alignItems: "center", gap: 8 }}><FluidGlyph active={rowActive} /><span style={{ width: 32, color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>{rowUsage.toFixed(1)}s</span></span></div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ color: "#7d7d86", fontFamily: "var(--font-mono)", fontSize: 10.5 }}>fluid-instance-{instance + 1}</span><span style={{ display: "flex", alignItems: "center", gap: 8 }}><FluidGlyph count={row.filter((trace) => now < trace.startedAt + trace.duration).length} /><span style={{ width: 32, color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>{rowUsage.toFixed(1)}s</span></span></div>
               <RequestTimeline requests={row} now={now} />
             </div>
           )
