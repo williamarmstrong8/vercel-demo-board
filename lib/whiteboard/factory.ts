@@ -187,7 +187,7 @@ export function createElement(
         ...base,
         type: "computecomparison",
         width: 560,
-        height: 760,
+        height: 980,
         title: "Compute comparison",
         spendRatePerSecond: 0.14,
         requestScope: base.id,
