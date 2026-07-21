@@ -1920,7 +1920,6 @@ function RequestDemoView({ el }: { el: CanvasElement }) {
 function RequestTimeline({ requests, now, overloaded = false, compact = false }: { requests: DemoRequest[]; now: number; overloaded?: boolean; compact?: boolean }) {
   return (
   <div style={{ position: "relative", height: compact ? 28 : Math.max(46, requests.length * 8 + 12), border: `1px solid ${overloaded ? "#ef2b2d" : "#252525"}`, borderRadius: 8, background: "#111", overflow: "hidden" }}>
-      {requests.length === 0 && <span style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#555", fontFamily: "var(--font-mono)", fontSize: 8.5 }}>idle capacity</span>}
       {requests.map((request, index) => {
         const progress = Math.min(Math.max((now - request.startedAt) / request.duration, 0), 1)
         const traceLeft = 100 - progress * 216
@@ -2051,7 +2050,7 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
     <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
       <header style={{ flexShrink: 0, minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Fluid</strong><span style={{ color: "#777", fontSize: 9.5 }}>Vercel Functions</span></div><span style={{ fontFamily: "var(--font-mono)", color: "#888", fontSize: 10 }}>Usage: <b style={{ color: "#ddd", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
       <div style={{ minHeight: 0, flex: 1, overflow: "hidden", padding: "12px 0", display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 12 }}>
-        {instanceIds.length === 0 ? <div style={{ margin: "auto", color: "#555", fontFamily: "var(--font-mono)", fontSize: 9 }}>Waiting for requests</div> : <div key={traces.at(-1)?.id} className="wb-compute-stack-in" style={{ display: "flex", flexDirection: "column", gap: 12 }}>{instanceIds.map((instance) => {
+        {instanceIds.length > 0 && <div key={traces.at(-1)?.id} className="wb-compute-stack-in" style={{ display: "flex", flexDirection: "column", gap: 12 }}>{instanceIds.map((instance) => {
           const row = traces.filter((trace) => trace.instance === instance)
           const latestEnd = Math.max(...row.map((trace) => trace.startedAt + trace.duration))
           const latestBillingEnd = Math.max(...row.map((trace) => trace.startedAt + trace.duration * FLUID_BILLING_FRACTION))
@@ -2125,7 +2124,7 @@ function ServerlessComputeView({ el }: { el: CanvasElement }) {
     <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
       <header style={{ flexShrink: 0, minHeight: 58, padding: "8px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Serverless</strong><span style={{ color: "#777", fontSize: 9.5 }}>One request per instance</span></div><span style={{ fontFamily: "var(--font-mono)", color: "#888", fontSize: 10 }}>Usage: <b style={{ color: "#ddd", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
       <div style={{ minHeight: 0, flex: 1, overflow: "hidden", padding: "8px 0", display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 7 }}>
-        {visibleTraces.length === 0 ? <div style={{ margin: "auto", color: "#555", fontFamily: "var(--font-mono)", fontSize: 9 }}>Waiting for requests</div> : <div key={visibleTraces.at(-1)?.id} className="wb-compute-stack-in" style={{ display: "flex", flexDirection: "column", gap: 7 }}>{visibleTraces.map((trace) => {
+        {visibleTraces.length > 0 && <div key={visibleTraces.at(-1)?.id} className="wb-compute-stack-in" style={{ display: "flex", flexDirection: "column", gap: 7 }}>{visibleTraces.map((trace) => {
           const billingEnd = trace.startedAt + trace.duration * FLUID_BILLING_FRACTION
           const latestEnd = billingEnd
           const rowUsage = Math.min(Math.max(now - trace.startedAt, 0), billingEnd - trace.startedAt) / 1000
