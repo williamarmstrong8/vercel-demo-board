@@ -2154,11 +2154,13 @@ function ComputeComparisonView({ el }: { el: CanvasElement }) {
   const update = useWhiteboard((state) => state.update)
   const scope = el.requestScope ?? el.id
   const [enabled, setEnabled] = useState<Record<ComparisonKind, boolean>>({ fluid: true, serverless: true, server: true })
+  const comparisonHeaderHeight = 58
+  const comparisonSectionHeight = (980 - comparisonHeaderHeight) / 3
   useLayoutEffect(() => {
-    if (el.width < 560 || el.height < 980) {
-      update([el.id], { width: Math.max(560, el.width), height: Math.max(980, el.height) })
+    if (el.width < 560) {
+      update([el.id], { width: 560 })
     }
-  }, [el.height, el.id, el.width, update])
+  }, [el.id, el.width, update])
   const scopes: Record<ComparisonKind, string> = {
     fluid: `${scope}:fluid`,
     serverless: `${scope}:serverless`,
@@ -2177,7 +2179,13 @@ function ComputeComparisonView({ el }: { el: CanvasElement }) {
   }
   const toggle = (kind: ComparisonKind) => (event: React.ChangeEvent<HTMLInputElement>) => {
     event.stopPropagation()
-    setEnabled((current) => ({ ...current, [kind]: event.target.checked }))
+    const checked = event.target.checked
+    setEnabled((current) => {
+      const next = { ...current, [kind]: checked }
+      const selectedCount = comparisonKinds.filter((item) => next[item]).length
+      update([el.id], { height: comparisonHeaderHeight + comparisonSectionHeight * selectedCount })
+      return next
+    })
   }
   return (
     <div style={{ width: "100%", height: "100%", border: el.showContainerBorder === false ? "none" : `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
@@ -2188,9 +2196,9 @@ function ComputeComparisonView({ el }: { el: CanvasElement }) {
         <button type="button" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onClick={sendRequest} style={{ ...requestControlStyle, flexShrink: 0, height: 32, gap: 7, padding: "0 14px", background: "#ededed", color: "#111", fontSize: 11.5, fontWeight: 500 }}><Zap size={14} />Send Request</button>
       </header>
       <div style={{ minHeight: 0, flex: 1, display: "flex", flexDirection: "column" }}>
-        {enabled.fluid && <div style={{ height: "33.333%", flexShrink: 0, overflow: "hidden" }}><FluidComputeView el={sectionElements.fluid} /></div>}
-        {enabled.serverless && <div style={{ height: "33.333%", flexShrink: 0, overflow: "hidden" }}><ServerlessComputeView el={sectionElements.serverless} /></div>}
-        {enabled.server && <div style={{ height: "33.333%", flexShrink: 0, overflow: "hidden" }}><Ec2View el={sectionElements.server} /></div>}
+        {enabled.fluid && <div style={{ height: comparisonSectionHeight, flexShrink: 0, overflow: "hidden" }}><FluidComputeView el={sectionElements.fluid} /></div>}
+        {enabled.serverless && <div style={{ height: comparisonSectionHeight, flexShrink: 0, overflow: "hidden" }}><ServerlessComputeView el={sectionElements.serverless} /></div>}
+        {enabled.server && <div style={{ height: comparisonSectionHeight, flexShrink: 0, overflow: "hidden" }}><Ec2View el={sectionElements.server} /></div>}
       </div>
     </div>
   )
