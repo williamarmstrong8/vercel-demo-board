@@ -57,17 +57,23 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
         },
       },
       {
+        ref: "requests",
+        type: "requestdemo",
+        x: 380,
+        y: 112,
+      },
+      {
         ref: "ec2",
         type: "ec2",
         x: 80,
-        y: 140,
+        y: 260,
         overrides: { spendStart: 12.4, spendRatePerSecond: 0.0018 },
       },
       {
         ref: "versus",
         type: "text",
         x: 470,
-        y: 300,
+        y: 420,
         overrides: {
           width: 70,
           height: 44,
@@ -81,14 +87,14 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
         ref: "fluid",
         type: "fluidcompute",
         x: 580,
-        y: 140,
+        y: 260,
         overrides: { spendStart: 3.1, spendRatePerSecond: 0.00055, activeDutyCycle: 0.42 },
       },
       {
         ref: "ec2-note",
         type: "card",
         x: 80,
-        y: 570,
+        y: 690,
         overrides: {
           width: 340,
           height: 118,
@@ -100,7 +106,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
         ref: "fluid-note",
         type: "card",
         x: 580,
-        y: 570,
+        y: 690,
         overrides: {
           width: 480,
           height: 118,

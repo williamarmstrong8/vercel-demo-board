@@ -1,7 +1,7 @@
 "use client"
 
 import { memo, useState, useLayoutEffect, useEffect, useRef, useMemo } from "react"
-import { Play, Loader2, Check, RotateCw, Lock, ChevronDown, ChevronRight, Folder, FileText, SquareTerminal, ExternalLink, Waypoints, Server } from "lucide-react"
+import { Play, Loader2, Check, RotateCw, Lock, ChevronDown, ChevronRight, Folder, FileText, SquareTerminal, ExternalLink, Waypoints, Server, Send } from "lucide-react"
 import type { AgentFile, CanvasElement, RunPhase } from "@/lib/whiteboard/types"
 import { getBounds } from "@/lib/whiteboard/geometry"
 import { getCodeTheme, tokenizeLine } from "@/lib/whiteboard/code-themes"
@@ -815,9 +815,11 @@ function renderContent(el: CanvasElement, b: { width: number; height: number }, 
       return <AiGatewayView el={el} />
     case "ec2":
       return <Ec2View el={el} />
-    case "fluidcompute":
-      return <FluidComputeView el={el} />
-    case "image":
+  case "fluidcompute":
+  return <FluidComputeView el={el} />
+  case "requestdemo":
+  return <RequestDemoView el={el} />
+  case "image":
       return <ImageView el={el} b={b} />
     default:
       return null
@@ -1833,76 +1835,103 @@ function SpendDisplay({ amount, rateLabel }: { amount: number; rateLabel: string
   )
 }
 
-function ServerTower() {
+type DemoRequest = { id: number; color: string; startedAt: number; duration: number }
+const REQUEST_EVENT = "v0-compute-demo-request"
+const REQUEST_COLORS = ["#8b5cf6", "#06b6d4", "#f59e0b", "#ec4899", "#3b82f6"]
+let requestSequence = 0
+
+function useDemoRequests() {
+  const [requests, setRequests] = useState<DemoRequest[]>([])
+  useEffect(() => {
+    const receive = (event: Event) => {
+      const request = (event as CustomEvent<DemoRequest>).detail
+      setRequests((current) => [...current.slice(-7), request])
+    }
+    window.addEventListener(REQUEST_EVENT, receive)
+    const cleanup = window.setInterval(() => setRequests((current) => current.filter((request) => Date.now() - request.startedAt < request.duration)), 120)
+    return () => {
+      window.removeEventListener(REQUEST_EVENT, receive)
+      window.clearInterval(cleanup)
+    }
+  }, [])
+  return requests
+}
+
+function RequestDemoView({ el }: { el: CanvasElement }) {
+  const [sent, setSent] = useState(0)
+  const run = (event: React.MouseEvent) => {
+    event.stopPropagation()
+    const id = ++requestSequence
+    const request: DemoRequest = { id, color: REQUEST_COLORS[(id - 1) % REQUEST_COLORS.length], startedAt: Date.now(), duration: 3600 + (id % 3) * 500 }
+    window.dispatchEvent(new CustomEvent(REQUEST_EVENT, { detail: request }))
+    setSent((count) => count + 1)
+  }
   return (
-    <div style={{ width: 92, height: 128, border: `1px solid ${computeToken.borderStrong}`, borderRadius: 10, background: computeToken.surfaceRaised, padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-      {[0, 1, 2, 3].map((row) => (
-        <div key={row} style={{ flex: 1, border: `1px solid ${computeToken.border}`, borderRadius: 4, padding: "0 6px", display: "flex", alignItems: "center", gap: 5 }}>
-          <i style={{ width: 6, height: 6, borderRadius: 99, background: row === 0 ? computeToken.green : computeToken.textMuted }} />
-          <i style={{ flex: 1, height: 2, borderRadius: 99, background: computeToken.borderStrong }} />
-        </div>
-      ))}
+    <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: computeToken.surface, color: computeToken.text, padding: 16, display: "flex", alignItems: "center", gap: 14, fontFamily: "var(--font-sans)" }}>
+      <div style={{ width: 38, height: 38, border: `1px solid ${computeToken.border}`, borderRadius: 8, background: computeToken.surfaceRaised, display: "flex", alignItems: "center", justifyContent: "center" }}><Send size={16} /></div>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}><strong style={{ fontSize: 13 }}>Request traffic</strong><span style={{ color: computeToken.textMuted, fontSize: 10 }}>Click repeatedly to create concurrent requests.</span></div>
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: computeToken.textMuted }}>{sent} sent</span>
+      <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={run} style={{ height: 34, border: `1px solid ${computeToken.text}`, borderRadius: 7, background: computeToken.text, color: computeToken.surface, padding: "0 13px", display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 600, cursor: "pointer" }}><Play size={12} fill="currentColor" />Run request</button>
+    </div>
+  )
+}
+
+function ServerTower({ requests, index }: { requests: DemoRequest[]; index: number }) {
+  return (
+    <div style={{ flex: 1, minWidth: 0, border: `1px solid ${computeToken.borderStrong}`, borderRadius: 9, background: "oklch(0.22 0 0)", color: "oklch(0.9 0 0)", padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 9 }}><strong>EC2-{index + 1}</strong><span style={{ color: "oklch(0.7 0 0)" }}>running</span></div>
+      {[0, 1, 2].map((row) => <div key={row} style={{ height: 14, border: "1px solid oklch(0.36 0 0)", borderRadius: 3, padding: "0 4px", display: "flex", alignItems: "center", gap: 3 }}><i style={{ width: 3, height: 3, borderRadius: 99, background: row === 0 ? computeToken.green : "oklch(0.48 0 0)" }} /><i style={{ flex: 1, height: 1, background: "oklch(0.4 0 0)" }} /></div>)}
+      <div style={{ marginTop: "auto", minHeight: 28, borderRadius: 4, background: "oklch(0.16 0 0)", padding: 4, display: "flex", flexDirection: "column", gap: 3 }}>
+        {requests.length === 0 ? <span style={{ margin: "auto", color: "oklch(0.52 0 0)", fontSize: 8 }}>idle capacity</span> : requests.map((request) => <i key={request.id} style={{ height: 4, width: "100%", borderRadius: 99, background: request.color }} />)}
+      </div>
     </div>
   )
 }
 
 function Ec2View({ el }: { el: CanvasElement }) {
   const { spend } = useIllustrativeSpend(el.spendStart ?? 12.4, el.spendRatePerSecond ?? 0.0018, "continuous")
-
+  const requests = useDemoRequests()
   return (
     <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: computeToken.surface, color: computeToken.text, overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
-      <header style={{ minHeight: 72, padding: "12px 16px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, borderBottom: `1px solid ${computeToken.border}` }}>
-        <strong style={{ fontSize: 16, textAlign: "center" }}>Amazon EC2</strong>
-        <span style={{ fontSize: 10, color: computeToken.textMuted }}>One provisioned instance</span>
-      </header>
-      <div style={{ flex: 1, padding: 20, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 15 }}>
-        <ServerTower />
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 550 }}>
-          <i style={{ width: 7, height: 7, borderRadius: 99, background: computeToken.green }} />
-          Always running
-        </div>
-        <p style={{ margin: 0, maxWidth: 220, color: computeToken.textMuted, fontSize: 11, lineHeight: 1.45, textAlign: "center" }}>The server stays allocated and billing continues, even when no work is running.</p>
+      <header style={{ minHeight: 66, padding: "10px 16px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, borderBottom: `1px solid ${computeToken.border}` }}><strong style={{ fontSize: 15 }}>Amazon EC2</strong><span style={{ fontSize: 9.5, color: computeToken.textMuted }}>Two fixed instances</span></header>
+      <div style={{ flex: 1, padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", gap: 9, flex: 1 }}><ServerTower index={0} requests={requests.filter((_, index) => index % 2 === 0)} /><ServerTower index={1} requests={requests.filter((_, index) => index % 2 === 1)} /></div>
+        <p style={{ margin: 0, color: computeToken.textMuted, fontSize: 10, lineHeight: 1.4, textAlign: "center" }}>Requests split across two servers. Both stay provisioned between requests.</p>
       </div>
-      <footer style={{ padding: "13px 16px 15px", borderTop: `1px solid ${computeToken.border}`, display: "flex", justifyContent: "center" }}>
-        <SpendDisplay amount={spend} rateLabel="always-on spend" />
-      </footer>
+      <footer style={{ padding: "11px 16px 13px", borderTop: `1px solid ${computeToken.border}`, display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel="two always-on servers" /></footer>
     </div>
   )
 }
 
 function FluidComputeView({ el }: { el: CanvasElement }) {
-  const { spend, active } = useIllustrativeSpend(el.spendStart ?? 3.1, el.spendRatePerSecond ?? 0.00055, "bursts", el.activeDutyCycle ?? 0.42)
-  const requests = ["A", "B", "C"]
-
+  const { spend } = useIllustrativeSpend(el.spendStart ?? 3.1, el.spendRatePerSecond ?? 0.00055, "bursts", el.activeDutyCycle ?? 0.42)
+  const requests = useDemoRequests()
+  const active = requests.length > 0
   return (
     <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: computeToken.surface, color: computeToken.text, overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
-      <header style={{ minHeight: 72, padding: "12px 16px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, borderBottom: `1px solid ${computeToken.border}` }}>
-        <strong style={{ fontSize: 16, textAlign: "center" }}>Vercel Functions</strong>
-        <span style={{ fontSize: 10, color: computeToken.textMuted }}>Fluid compute</span>
-      </header>
-      <div style={{ flex: 1, padding: 20, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-            {requests.map((request, index) => (
-              <div key={request} style={{ width: 72, height: 34, border: `1px solid ${computeToken.border}`, borderRadius: 7, background: active && index < 2 ? computeToken.greenBg : computeToken.surfaceRaised, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontFamily: "var(--font-mono)", fontSize: 10 }}>
-                <span style={{ color: active && index < 2 ? computeToken.green : computeToken.textMuted }}>ƒ</span>Request {request}
+      <header style={{ minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${computeToken.border}` }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Vercel Functions</strong><span style={{ fontSize: 9.5, color: computeToken.textMuted }}>Fluid compute</span></div><span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: computeToken.textMuted }}>Usage: {active ? `${requests.length}.0s` : "0.0s"}</span></header>
+      <div style={{ flex: 1, padding: "16px 15px", display: "flex", flexDirection: "column", gap: 14 }}>
+        {[0, 1].map((instance) => {
+          const row = requests.filter((_, index) => index % 2 === instance)
+          return (
+            <div key={instance} style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
+                <span style={{ fontFamily: "var(--font-mono)", color: computeToken.textSecondary }}>fluid-instance-{instance + 1}</span>
+                <span style={{ color: computeToken.textMuted }}>{row.length ? `${row.length} active` : "ready"}</span>
               </div>
-            ))}
-          </div>
-          <span style={{ color: computeToken.textMuted, fontSize: 16 }}>→</span>
-          <div style={{ width: 128, height: 116, border: `1px solid ${active ? computeToken.green : computeToken.borderStrong}`, borderRadius: 10, background: active ? computeToken.greenBg : computeToken.surfaceRaised, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }}>
-            <div style={{ display: "flex", gap: 5 }}>
-              {[0, 1, 2].map((slot) => <i key={slot} style={{ width: 24, height: 32, border: `1px solid ${computeToken.borderStrong}`, borderRadius: 4, background: active && slot < 2 ? computeToken.green : computeToken.surface }} />)}
+              <div style={{ minHeight: 42, borderRadius: 7, background: "oklch(0.18 0 0)", padding: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+                {row.length === 0 ? (
+                  <i style={{ height: 5, margin: "12px 0", borderRadius: 99, background: "oklch(0.3 0 0)" }} />
+                ) : (
+                  row.map((request, index) => <i key={request.id} style={{ height: 5, marginLeft: `${8 + index * 11}%`, width: `${82 - index * 8}%`, borderRadius: 99, background: request.color }} />)
+                )}
+              </div>
             </div>
-            <strong style={{ fontSize: 11, textAlign: "center" }}>Shared compute</strong>
-            <span style={{ fontSize: 9, color: active ? computeToken.green : computeToken.textMuted }}>{active ? "Running work" : "Waiting for work"}</span>
-          </div>
-        </div>
-        <p style={{ margin: 0, maxWidth: 310, color: computeToken.textMuted, fontSize: 11, lineHeight: 1.45, textAlign: "center" }}>Multiple functions share compute. Spend advances only while work is active.</p>
+          )
+        })}
+        <p style={{ margin: "auto 0 0", color: computeToken.textMuted, fontSize: 10, lineHeight: 1.4, textAlign: "center" }}>Concurrent requests share warm instances. Compute scales with active work.</p>
       </div>
-      <footer style={{ padding: "13px 16px 15px", borderTop: `1px solid ${computeToken.border}`, display: "flex", justifyContent: "center" }}>
-        <SpendDisplay amount={spend} rateLabel={active ? "active compute spend" : "spend paused"} />
-      </footer>
+      <footer style={{ padding: "11px 16px 13px", borderTop: `1px solid ${computeToken.border}`, display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel={active ? "active compute spend" : "spend paused"} /></footer>
     </div>
   )
 }

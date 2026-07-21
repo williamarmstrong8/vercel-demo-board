@@ -165,6 +165,18 @@ export function createElement(
         strokeWidth: 1,
         rounded: true,
       }
+    case "requestdemo":
+      return {
+        ...base,
+        type: "requestdemo",
+        width: 360,
+        height: 112,
+        title: "Request traffic",
+        fill: "#0a0a0a",
+        stroke: "#2e2e2e",
+        strokeWidth: 1,
+        rounded: true,
+      }
     case "image":
       return { ...base, type: "image", width: 240, height: 160, fill: "transparent" }
       case "channelui":

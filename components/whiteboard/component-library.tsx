@@ -15,6 +15,7 @@ import {
   Square,
   HardDrive,
   FunctionSquare,
+  Send,
 } from "lucide-react"
 import { useWhiteboard } from "@/lib/whiteboard/store"
 import type { ElementType, Tool } from "@/lib/whiteboard/types"
@@ -63,6 +64,13 @@ const ITEMS: LibraryItem[] = [
     keywords: ["server", "api", "endpoint", "backend", "request", "http"],
   },
   {
+    id: "requestdemo",
+    icon: Send,
+    label: "Request traffic",
+    description: "Send one or more requests into a compute comparison.",
+    keywords: ["request", "traffic", "run", "send", "simulation", "load"],
+  },
+  {
     id: "ec2",
     icon: HardDrive,
     label: "Amazon EC2",
@@ -102,6 +110,7 @@ const NODE_ICONS: Partial<Record<ElementType, React.ComponentType<{ className?: 
   aigateway: Waypoints,
   ec2: HardDrive,
   fluidcompute: FunctionSquare,
+  requestdemo: Send,
 }
 
 type Section = "components" | "templates"
