@@ -1787,13 +1787,23 @@ function useIllustrativeSpend(
   dutyCycle = 0.42,
 ) {
   const mountedAt = useRef(Date.now())
+  const [baseSpend, setBaseSpend] = useState(start)
   const [elapsed, setElapsed] = useState(0)
 
   useEffect(() => {
     const tick = () => setElapsed((Date.now() - mountedAt.current) / 1000)
+    const reset = () => {
+      mountedAt.current = Date.now()
+      setBaseSpend(0)
+      setElapsed(0)
+    }
     tick()
     const timer = window.setInterval(tick, 80)
-    return () => window.clearInterval(timer)
+    window.addEventListener(RESET_REQUEST_EVENT, reset)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener(RESET_REQUEST_EVENT, reset)
+    }
   }, [])
 
   const cycleSeconds = 4
@@ -1805,7 +1815,7 @@ function useIllustrativeSpend(
       : fullCycles * cycleSeconds * dutyCycle + Math.min(cycleElapsed, cycleSeconds * dutyCycle)
 
   return {
-    spend: start + activeSeconds * ratePerSecond,
+    spend: baseSpend + activeSeconds * ratePerSecond,
     active: mode === "continuous" || cycleElapsed < cycleSeconds * dutyCycle,
   }
 }
