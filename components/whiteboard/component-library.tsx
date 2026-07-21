@@ -85,6 +85,13 @@ const ITEMS: LibraryItem[] = [
     keywords: ["vercel", "functions", "fluid", "compute", "serverless", "cost", "spend", "pool"],
   },
   {
+    id: "serverlesscompute",
+    icon: FunctionSquare,
+    label: "Serverless Functions",
+    description: "One isolated function instance per request.",
+    keywords: ["functions", "serverless", "compute", "instance", "request", "cost", "spend"],
+  },
+  {
     id: "filetree",
     icon: FolderTree,
     label: "eve agent",
@@ -110,6 +117,7 @@ const NODE_ICONS: Partial<Record<ElementType, React.ComponentType<{ className?: 
   aigateway: Waypoints,
   ec2: HardDrive,
   fluidcompute: FunctionSquare,
+  serverlesscompute: FunctionSquare,
   requestdemo: Send,
 }
 

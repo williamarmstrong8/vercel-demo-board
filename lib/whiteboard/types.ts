@@ -18,6 +18,7 @@ export type Tool =
   | "aigateway"
   | "ec2"
   | "fluidcompute"
+  | "serverlesscompute"
   | "requestdemo"
 
 export type ElementType =
@@ -39,6 +40,7 @@ export type ElementType =
   | "aigateway"
   | "ec2"
   | "fluidcompute"
+  | "serverlesscompute"
   | "requestdemo"
 
 // A single file inside an eve agent file-tree block. Clicking its row opens the

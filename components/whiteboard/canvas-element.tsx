@@ -817,6 +817,8 @@ function renderContent(el: CanvasElement, b: { width: number; height: number }, 
       return <Ec2View el={el} />
   case "fluidcompute":
   return <FluidComputeView el={el} />
+  case "serverlesscompute":
+  return <ServerlessComputeView el={el} />
   case "requestdemo":
   return <RequestDemoView el={el} />
   case "image":
@@ -2023,6 +2025,69 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
         })}
       </div>
       <footer style={{ flexShrink: 0, padding: "11px 16px 13px", borderTop: "1px solid #202020", display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel={anyActive ? "active compute spend" : "spend paused"} /></footer>
+    </div>
+  )
+}
+
+function ServerlessComputeView({ el }: { el: CanvasElement }) {
+  const [traces, setTraces] = useState<FluidTrace[]>([])
+  const [now, setNow] = useState(() => Date.now())
+  const hasActiveRequests = traces.some((trace) => now - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION)
+  const { spend } = useIllustrativeSpend(el.spendStart ?? 0, el.spendRatePerSecond ?? 0.14, hasActiveRequests)
+  const [usage, setUsage] = useState(0)
+  const lastTick = useRef(Date.now())
+  useEffect(() => {
+    const receive = (event: Event) => {
+      const request = (event as CustomEvent<DemoRequest>).detail
+      setTraces((current) => [...current.slice(-11), { ...request, instance: request.id }])
+    }
+    const reset = () => {
+      setTraces([])
+      setUsage(0)
+      const tick = Date.now()
+      setNow(tick)
+      lastTick.current = tick
+    }
+    window.addEventListener(REQUEST_EVENT, receive)
+    window.addEventListener(RESET_REQUEST_EVENT, reset)
+    return () => {
+      window.removeEventListener(REQUEST_EVENT, receive)
+      window.removeEventListener(RESET_REQUEST_EVENT, reset)
+    }
+  }, [])
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const tick = Date.now()
+      const elapsed = (tick - lastTick.current) / 1000
+      lastTick.current = tick
+      setNow(tick)
+      if (traces.some((trace) => tick - trace.startedAt < trace.duration * FLUID_BILLING_FRACTION)) setUsage((current) => current + elapsed)
+      setTraces((current) => current.filter((trace) => tick - trace.startedAt < trace.duration + 500))
+    }, 80)
+    return () => window.clearInterval(timer)
+  }, [traces])
+  const visibleTraces = traces.slice(-3)
+  return (
+    <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
+      <header style={{ flexShrink: 0, minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Serverless</strong><span style={{ color: "#777", fontSize: 9.5 }}>One request per instance</span></div><span style={{ fontFamily: "var(--font-mono)", color: "#888", fontSize: 10 }}>Usage: <b style={{ color: "#ddd", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
+      <div style={{ minHeight: 0, flex: 1, overflow: "hidden", padding: "12px 0", display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 12 }}>
+        {visibleTraces.length === 0 ? <div style={{ margin: "auto", color: "#555", fontFamily: "var(--font-mono)", fontSize: 9 }}>Waiting for requests</div> : visibleTraces.map((trace) => {
+          const billingEnd = trace.startedAt + trace.duration * FLUID_BILLING_FRACTION
+          const latestEnd = trace.startedAt + trace.duration
+          const rowUsage = Math.min(Math.max(now - trace.startedAt, 0), billingEnd - trace.startedAt) / 1000
+          const openingProgress = Math.min(Math.max((now - trace.startedAt) / 350, 0), 1)
+          const closingProgress = Math.min(Math.max((now - latestEnd) / 500, 0), 1)
+          const lifecycleOpacity = Math.min(openingProgress, 1 - closingProgress)
+          const active = now < billingEnd
+          return (
+            <div key={trace.id} style={{ flexShrink: 0, padding: "0 14px", display: "flex", flexDirection: "column", gap: 7, opacity: lifecycleOpacity, transform: `translateY(${(1 - openingProgress) * 4 - closingProgress * 4}px)`, transition: "opacity 80ms linear, transform 80ms linear" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ color: "#7d7d86", fontFamily: "var(--font-mono)", fontSize: 10.5 }}>serverless-instance-{trace.instance}</span><span style={{ display: "flex", alignItems: "center", gap: 8 }}><FluidGlyph count={active ? 1 : 0} /><span style={{ width: 32, color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>{rowUsage.toFixed(1)}s</span></span></div>
+              <RequestTimeline requests={[trace]} now={now} />
+            </div>
+          )
+        })}
+      </div>
+      <footer style={{ flexShrink: 0, padding: "11px 16px 13px", borderTop: "1px solid #202020", display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel={hasActiveRequests ? "active compute spend" : "spend paused"} /></footer>
     </div>
   )
 }

@@ -432,7 +432,7 @@ export function CanvasSurface() {
     if (e.button !== 0) return
 
     // creation tools
-    if (["rectangle", "ellipse", "diamond", "arrow", "line", "text", "card", "code", "terminal", "website", "server", "filetree", "aigateway", "ec2", "fluidcompute", "requestdemo"].includes(tool)) {
+    if (["rectangle", "ellipse", "diamond", "arrow", "line", "text", "card", "code", "terminal", "website", "server", "filetree", "aigateway", "ec2", "fluidcompute", "serverlesscompute", "requestdemo"].includes(tool)) {
       const el = createElement(tool, world.x, world.y, {
         stroke: "#000000",
         fill: tool === "card" ? "#ffffff" : "transparent",
@@ -449,6 +449,7 @@ export function CanvasSurface() {
         tool === "aigateway" ||
         tool === "ec2" ||
         tool === "fluidcompute" ||
+        tool === "serverlesscompute" ||
         tool === "requestdemo"
       if (fixedSize) {
         // place at click; these tools have a fixed default size

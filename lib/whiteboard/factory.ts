@@ -165,6 +165,20 @@ export function createElement(
         strokeWidth: 1,
         rounded: true,
       }
+    case "serverlesscompute":
+      return {
+        ...base,
+        type: "serverlesscompute",
+        width: 410,
+        height: 390,
+        title: "Serverless Functions",
+        spendStart: 0,
+        spendRatePerSecond: 0.14,
+        fill: "#0a0a0a",
+        stroke: "#2e2e2e",
+        strokeWidth: 1,
+        rounded: true,
+      }
     case "requestdemo":
       return {
         ...base,
