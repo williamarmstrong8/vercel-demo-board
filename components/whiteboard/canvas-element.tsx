@@ -1867,6 +1867,11 @@ function RequestDemoView({ el }: { el: CanvasElement }) {
     window.dispatchEvent(new CustomEvent(REQUEST_EVENT, { detail: request }))
     setSent((count) => count + 1)
   }
+  const reset = (event: React.MouseEvent) => {
+    event.stopPropagation()
+    setSent(0)
+  }
+  const controlStyle: React.CSSProperties = { pointerEvents: "auto", display: "inline-flex", alignItems: "center", justifyContent: "center", height: 30, borderRadius: 9999, border: "1px solid rgba(255,255,255,0.14)", background: "#000000", color: "#ffffff", fontFamily: "var(--font-sans)", cursor: "pointer", boxShadow: "none" }
   return (
     <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, fontFamily: "var(--font-sans)" }}>
       <div style={{ width: "100%", flex: 1, border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: computeToken.surface, color: computeToken.text, padding: "12px 15px", display: "flex", alignItems: "center", gap: 12 }}>
@@ -1874,7 +1879,10 @@ function RequestDemoView({ el }: { el: CanvasElement }) {
         <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}><strong style={{ fontSize: 13 }}>Request traffic</strong><span style={{ color: computeToken.textMuted, fontSize: 10 }}>Each click sends the same request to both systems.</span></div>
         <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: computeToken.textMuted }}>{sent} sent</span>
       </div>
-      <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={run} style={{ pointerEvents: "auto", height: 34, border: `1px solid ${computeToken.text}`, borderRadius: 7, background: computeToken.text, color: computeToken.surface, padding: "0 16px", display: "flex", alignItems: "center", gap: 7, fontSize: 11, fontWeight: 600, cursor: "pointer" }}><Play size={12} fill="currentColor" />Run request</button>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <button type="button" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onClick={run} style={{ ...controlStyle, gap: 6, padding: "0 14px", fontSize: 13, fontWeight: 500, whiteSpace: "nowrap" }}><Play size={13} fill="currentColor" />Run request</button>
+        {sent > 0 && <button type="button" title="Reset requests" aria-label="Reset requests" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onClick={reset} style={{ ...controlStyle, width: 30 }}><RotateCw size={14} /></button>}
+      </div>
     </div>
   )
 }
