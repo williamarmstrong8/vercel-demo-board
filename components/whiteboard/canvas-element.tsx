@@ -1885,10 +1885,17 @@ function RequestTimeline({ requests, now, overloaded = false }: { requests: Demo
       {requests.length === 0 && <span style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#555", fontFamily: "var(--font-mono)", fontSize: 8.5 }}>idle capacity</span>}
       {requests.map((request, index) => {
         const progress = Math.min(Math.max((now - request.startedAt) / request.duration, 0), 1)
-        const right = Math.max(0, 5 - progress * 5)
-        const total = Math.max(8, progress * 86)
-        const work = Math.max(4, Math.min(total, 16 + progress * 19))
-        return <span key={request.id} style={{ position: "absolute", top: 7 + index * 8, right: `${right}%`, width: `${total}%`, height: 5, opacity: 0.95 }}><i style={{ position: "absolute", inset: 0, borderRadius: 99, background: FLUID_WORK_COLORS[(request.id - 1) % FLUID_WORK_COLORS.length], opacity: 0.38 }} /><i style={{ position: "absolute", right: 0, width: `${work}%`, height: "100%", borderRadius: 99, background: request.color }} /></span>
+        const callEnd = 0.28
+        const waitEnd = 0.82
+        const callProgress = Math.min(progress / callEnd, 1)
+        const waitProgress = Math.min(Math.max((progress - callEnd) / (waitEnd - callEnd), 0), 1)
+        const spinProgress = Math.min(Math.max((progress - waitEnd) / (1 - waitEnd), 0), 1)
+        const workLeft = 80 - callProgress * 13 - waitProgress * 18 - spinProgress * 12
+        const workWidth = 4 + callProgress * 14
+        const waitLeft = workLeft + workWidth - 1
+        const waitWidth = waitProgress * (92 - waitLeft)
+        const opacity = 1 - spinProgress * 0.72
+        return <span key={request.id} style={{ position: "absolute", top: 7 + index * 8, left: 0, width: "100%", height: 5, opacity, transition: "opacity 80ms linear" }}><i style={{ position: "absolute", left: `${workLeft}%`, width: `${workWidth}%`, height: "100%", borderRadius: 99, background: request.color, transition: "left 80ms linear, width 80ms linear" }} /><i style={{ position: "absolute", left: `${waitLeft}%`, width: `${waitWidth}%`, height: "100%", borderRadius: 99, background: FLUID_WORK_COLORS[(request.id - 1) % FLUID_WORK_COLORS.length], opacity: 0.38, transition: "left 80ms linear, width 80ms linear" }} /></span>
       })}
       {overloaded && <span style={{ position: "absolute", inset: 0, background: "repeating-linear-gradient(45deg, transparent 0 20px, rgba(239,43,45,.32) 20px 40px)", pointerEvents: "none" }} />}
     </div>
