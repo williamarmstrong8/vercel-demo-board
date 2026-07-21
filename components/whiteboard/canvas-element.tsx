@@ -1973,11 +1973,14 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
           const row = traces.filter((trace) => trace.instance === instance)
           const rowUsage = row.reduce((total, trace) => total + Math.min(Math.max(now - trace.startedAt, 0), trace.duration), 0) / 1000
           const latestEnd = Math.max(...row.map((trace) => trace.startedAt + trace.duration))
+          const earliestStart = Math.min(...row.map((trace) => trace.startedAt))
+          const openingProgress = Math.min(Math.max((now - earliestStart) / 350, 0), 1)
           const closingProgress = Math.min(Math.max((now - latestEnd) / 500, 0), 1)
+          const lifecycleOpacity = Math.min(openingProgress, 1 - closingProgress)
           const rowActive = row.some((trace) => now < trace.startedAt + trace.duration)
           return (
-            <div key={instance} style={{ flexShrink: 0, display: "flex", flexDirection: "column", gap: 7, opacity: 1 - closingProgress, transform: `translateY(${-closingProgress * 4}px)`, transition: "opacity 80ms linear, transform 80ms linear" }}>
-              <div style={{ padding: "0 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ color: "#7d7d86", fontFamily: "var(--font-mono)", fontSize: 10.5 }}>fluid-instance-{instance + 1}</span><span style={{ display: "flex", alignItems: "center", gap: 8 }}><FluidGlyph active={rowActive} /><span style={{ width: 32, color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>{rowUsage.toFixed(1)}s</span></span></div>
+            <div key={instance} style={{ flexShrink: 0, padding: "0 14px", display: "flex", flexDirection: "column", gap: 7, opacity: lifecycleOpacity, transform: `translateY(${(1 - openingProgress) * 4 - closingProgress * 4}px)`, transition: "opacity 80ms linear, transform 80ms linear" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ color: "#7d7d86", fontFamily: "var(--font-mono)", fontSize: 10.5 }}>fluid-instance-{instance + 1}</span><span style={{ display: "flex", alignItems: "center", gap: 8 }}><FluidGlyph active={rowActive} /><span style={{ width: 32, color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>{rowUsage.toFixed(1)}s</span></span></div>
               <RequestTimeline requests={row} now={now} />
             </div>
           )

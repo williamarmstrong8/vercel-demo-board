@@ -66,14 +66,14 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       {
         ref: "ec2",
         type: "ec2",
-        x: 80,
+        x: 60,
         y: 260,
-        overrides: { spendStart: 12.4, spendRatePerSecond: 0.0018 },
+        overrides: { width: 410, spendStart: 12.4, spendRatePerSecond: 0.0018 },
       },
       {
         ref: "versus",
         type: "text",
-        x: 470,
+        x: 525,
         y: 420,
         overrides: {
           width: 70,
@@ -87,17 +87,17 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       {
         ref: "fluid",
         type: "fluidcompute",
-        x: 580,
+        x: 650,
         y: 260,
-        overrides: { spendStart: 3.1, spendRatePerSecond: 0.00055, activeDutyCycle: 0.42 },
+        overrides: { width: 410, spendStart: 3.1, spendRatePerSecond: 0.00055, activeDutyCycle: 0.42 },
       },
       {
         ref: "ec2-note",
         type: "card",
-        x: 80,
+        x: 60,
         y: 690,
         overrides: {
-          width: 340,
+          width: 410,
           height: 118,
           title: "Pay while idle",
           text: "One provisioned instance keeps accruing illustrative spend whether requests arrive or not.",
@@ -106,10 +106,10 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       {
         ref: "fluid-note",
         type: "card",
-        x: 580,
+        x: 650,
         y: 690,
         overrides: {
-          width: 480,
+          width: 410,
           height: 118,
           title: "Pay for active compute",
           text: "Multiple functions share warm resources. The illustrative counter advances only during active bursts.",

@@ -140,7 +140,7 @@ export function createElement(
       return {
         ...base,
         type: "ec2",
-        width: 340,
+        width: 410,
         height: 390,
         title: "Amazon EC2",
         spendStart: 12.4,
@@ -154,7 +154,7 @@ export function createElement(
       return {
         ...base,
         type: "fluidcompute",
-        width: 480,
+        width: 410,
         height: 390,
         title: "Vercel Functions",
         spendStart: 3.1,
