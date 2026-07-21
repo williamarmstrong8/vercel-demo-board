@@ -65,6 +65,7 @@ export function CanvasSurface() {
   const selectedIds = useWhiteboard((s) => s.selectedIds)
   const editingId = useWhiteboard((s) => s.editingId)
   const tool = useWhiteboard((s) => s.tool)
+  const pendingTemplate = useWhiteboard((s) => s.pendingTemplate)
 
   const [guides, setGuides] = useState<SnapGuide[]>([])
   const [marquee, setMarquee] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
@@ -177,6 +178,7 @@ export function CanvasSurface() {
         store.deleteSelected()
       } else if (e.key === "Escape") {
         store.setEditing(null)
+        store.setPendingTemplate(null)
         store.clearSelection()
       } else if (e.key === "v" || e.key === "1") store.setTool("select")
       else if (e.key === "h") store.setTool("hand")
@@ -472,6 +474,22 @@ export function CanvasSurface() {
 
     if (e.button !== 0) return
 
+    if (store.pendingTemplate) {
+      const { elements: templateElements, connections } = store.pendingTemplate
+      if (templateElements.length > 0) {
+        const minX = Math.min(...templateElements.map((element) => element.x))
+        const minY = Math.min(...templateElements.map((element) => element.y))
+        const placed = templateElements.map((element) => ({
+          ...element,
+          x: element.x + world.x - minX,
+          y: element.y + world.y - minY,
+        }))
+        store.addTemplate(placed, connections)
+        e.preventDefault()
+      }
+      return
+    }
+
     // creation tools
     if (["rectangle", "ellipse", "diamond", "arrow", "line", "text", "card", "code", "terminal", "website", "server", "filetree", "aigateway", "ec2", "fluidcompute", "serverlesscompute", "computecomparison", "requestdemo"].includes(tool)) {
       const el = createElement(tool, world.x, world.y, {
@@ -604,9 +622,11 @@ export function CanvasSurface() {
   const cursor =
     tool === "hand"
       ? "grab"
-      : tool === "select"
-        ? "default"
-        : "crosshair"
+      : pendingTemplate
+        ? "crosshair"
+        : tool === "select"
+          ? "default"
+          : "crosshair"
 
   // The dot grid stays a fixed screen-space pattern — it pans with the camera
   // but its spacing and dot size never scale with zoom. Only the content layer

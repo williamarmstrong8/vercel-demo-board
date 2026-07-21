@@ -186,7 +186,7 @@ export function ComponentLibrary() {
   const [query, setQuery] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
   const setTool = useWhiteboard((s) => s.setTool)
-  const addTemplate = useWhiteboard((s) => s.addTemplate)
+  const setPendingTemplate = useWhiteboard((s) => s.setPendingTemplate)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -246,7 +246,7 @@ export function ComponentLibrary() {
 
   const useTemplate = (t: WorkflowTemplate) => {
     const { elements, connections } = instantiateTemplate(t)
-    addTemplate(elements, connections)
+    setPendingTemplate({ elements, connections })
     setOpen(false)
   }
 
