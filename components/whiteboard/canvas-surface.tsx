@@ -412,6 +412,25 @@ export function CanvasSurface() {
       if (h.includes("n")) top = vy
       if (h.includes("s")) bottom = vy
     }
+
+    // Shift-dragging a corner preserves the original selection aspect ratio.
+    // The opposite corner stays fixed, matching standard design-tool behavior.
+    const isCorner = (h.includes("w") || h.includes("e")) && (h.includes("n") || h.includes("s"))
+    if (lockAngle && isCorner && ob.width > 0 && ob.height > 0) {
+      const width = Math.abs(right - left)
+      const height = Math.abs(bottom - top)
+      const widthScale = width / ob.width
+      const heightScale = height / ob.height
+      const scale = Math.max(widthScale, heightScale)
+      const lockedWidth = Math.max(10, ob.width * scale)
+      const lockedHeight = Math.max(10, ob.height * scale)
+      if (h.includes("w")) left = right - lockedWidth
+      else right = left + lockedWidth
+      if (h.includes("n")) top = bottom - lockedHeight
+      else bottom = top + lockedHeight
+      newGuides.length = 0
+    }
+
     setGuides(newGuides)
     const nb = {
       x: Math.min(left, right),
