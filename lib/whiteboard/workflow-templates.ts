@@ -60,7 +60,8 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
         ref: "requests",
         type: "requestdemo",
         x: 380,
-        y: 112,
+        y: 108,
+        overrides: { height: 128 },
       },
       {
         ref: "ec2",

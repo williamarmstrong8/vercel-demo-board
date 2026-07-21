@@ -1826,7 +1826,7 @@ function SpendDisplay({ amount, rateLabel }: { amount: number; rateLabel: string
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, minWidth: 112 }}>
       <span style={{ fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums", fontSize: 24, lineHeight: 1, fontWeight: 600, color: computeToken.text, letterSpacing: "-0.04em" }}>
-        {amount.toFixed(2)}¢
+        ${amount.toFixed(2)}
       </span>
       <span style={{ fontSize: 9, color: computeToken.textMuted, textTransform: "uppercase", letterSpacing: "0.08em", textAlign: "center" }}>
         {rateLabel}
@@ -1867,23 +1867,37 @@ function RequestDemoView({ el }: { el: CanvasElement }) {
     setSent((count) => count + 1)
   }
   return (
-    <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: computeToken.surface, color: computeToken.text, padding: 16, display: "flex", alignItems: "center", gap: 14, fontFamily: "var(--font-sans)" }}>
-      <div style={{ width: 38, height: 38, border: `1px solid ${computeToken.border}`, borderRadius: 8, background: computeToken.surfaceRaised, display: "flex", alignItems: "center", justifyContent: "center" }}><Send size={16} /></div>
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}><strong style={{ fontSize: 13 }}>Request traffic</strong><span style={{ color: computeToken.textMuted, fontSize: 10 }}>Click repeatedly to create concurrent requests.</span></div>
-      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: computeToken.textMuted }}>{sent} sent</span>
-      <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={run} style={{ height: 34, border: `1px solid ${computeToken.text}`, borderRadius: 7, background: computeToken.text, color: computeToken.surface, padding: "0 13px", display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 600, cursor: "pointer" }}><Play size={12} fill="currentColor" />Run request</button>
+    <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, fontFamily: "var(--font-sans)" }}>
+      <div style={{ width: "100%", flex: 1, border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: computeToken.surface, color: computeToken.text, padding: "12px 15px", display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ width: 36, height: 36, border: `1px solid ${computeToken.border}`, borderRadius: 8, background: computeToken.surfaceRaised, display: "flex", alignItems: "center", justifyContent: "center" }}><Send size={15} /></div>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}><strong style={{ fontSize: 13 }}>Request traffic</strong><span style={{ color: computeToken.textMuted, fontSize: 10 }}>Each click sends the same request to both systems.</span></div>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: computeToken.textMuted }}>{sent} sent</span>
+      </div>
+      <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={run} style={{ pointerEvents: "auto", height: 34, border: `1px solid ${computeToken.text}`, borderRadius: 7, background: computeToken.text, color: computeToken.surface, padding: "0 16px", display: "flex", alignItems: "center", gap: 7, fontSize: 11, fontWeight: 600, cursor: "pointer" }}><Play size={12} fill="currentColor" />Run request</button>
     </div>
   )
 }
 
 function ServerTower({ requests, index }: { requests: DemoRequest[]; index: number }) {
   return (
-    <div style={{ flex: 1, minWidth: 0, border: `1px solid ${computeToken.borderStrong}`, borderRadius: 9, background: "oklch(0.22 0 0)", color: "oklch(0.9 0 0)", padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 9 }}><strong>EC2-{index + 1}</strong><span style={{ color: "oklch(0.7 0 0)" }}>running</span></div>
-      {[0, 1, 2].map((row) => <div key={row} style={{ height: 14, border: "1px solid oklch(0.36 0 0)", borderRadius: 3, padding: "0 4px", display: "flex", alignItems: "center", gap: 3 }}><i style={{ width: 3, height: 3, borderRadius: 99, background: row === 0 ? computeToken.green : "oklch(0.48 0 0)" }} /><i style={{ flex: 1, height: 1, background: "oklch(0.4 0 0)" }} /></div>)}
-      <div style={{ marginTop: "auto", minHeight: 28, borderRadius: 4, background: "oklch(0.16 0 0)", padding: 4, display: "flex", flexDirection: "column", gap: 3 }}>
-        {requests.length === 0 ? <span style={{ margin: "auto", color: "oklch(0.52 0 0)", fontSize: 8 }}>idle capacity</span> : requests.map((request) => <i key={request.id} style={{ height: 4, width: "100%", borderRadius: 99, background: request.color }} />)}
+    <div style={{ flex: 1, minWidth: 0, border: "1px solid #333", borderRadius: 8, background: "#0a0a0a", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+      <div style={{ height: 32, padding: "0 9px", borderBottom: "1px solid #292929", background: "#141414", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <strong style={{ fontSize: 9.5 }}>EC2-{index + 1}</strong>
+        <span style={{ display: "flex", alignItems: "center", gap: 4, color: "#8a8a8a", fontSize: 8 }}><i style={{ width: 5, height: 5, borderRadius: 99, background: "#22c55e" }} />Running</span>
       </div>
+      <div style={{ padding: 8, display: "flex", flexDirection: "column", gap: 5 }}>
+        {[0, 1, 2].map((row) => (
+          <div key={row} style={{ height: 23, border: "1px solid #303030", borderRadius: 4, background: "#111", padding: "0 6px", display: "flex", alignItems: "center", gap: 5 }}>
+            <i style={{ width: 4, height: 4, borderRadius: 99, background: row === 0 ? "#0070f3" : row === 1 ? "#f5a623" : "#22c55e" }} />
+            <i style={{ flex: 1, height: 2, borderRadius: 99, background: "#383838" }} />
+            <i style={{ width: 11, height: 2, borderRadius: 99, background: "#282828" }} />
+          </div>
+        ))}
+      </div>
+      <div style={{ margin: "0 8px 8px", minHeight: 36, border: "1px solid #272727", borderRadius: 4, background: "#050505", padding: 5, display: "flex", flexDirection: "column", gap: 4 }}>
+        {requests.length === 0 ? <span style={{ margin: "auto", color: "#666", fontSize: 8 }}>idle capacity</span> : requests.map((request) => <i key={request.id} style={{ height: 5, width: "100%", borderRadius: 99, background: request.color }} />)}
+      </div>
+      <div style={{ marginTop: "auto", height: 25, padding: "0 8px", borderTop: "1px solid #252525", color: "#777", display: "flex", alignItems: "center", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: 7.5 }}><span>2 vCPU</span><span>8 GB</span></div>
     </div>
   )
 }
@@ -1891,9 +1905,15 @@ function ServerTower({ requests, index }: { requests: DemoRequest[]; index: numb
 function Ec2View({ el }: { el: CanvasElement }) {
   const { spend } = useIllustrativeSpend(el.spendStart ?? 12.4, el.spendRatePerSecond ?? 0.0018, "continuous")
   const requests = useDemoRequests()
+  const [startedAt] = useState(() => Date.now())
+  const [usage, setUsage] = useState(0)
+  useEffect(() => {
+    const timer = window.setInterval(() => setUsage(((Date.now() - startedAt) / 1000) * 2), 100)
+    return () => window.clearInterval(timer)
+  }, [startedAt])
   return (
     <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: computeToken.surface, color: computeToken.text, overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
-      <header style={{ minHeight: 66, padding: "10px 16px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, borderBottom: `1px solid ${computeToken.border}` }}><strong style={{ fontSize: 15 }}>Amazon EC2</strong><span style={{ fontSize: 9.5, color: computeToken.textMuted }}>Two fixed instances</span></header>
+      <header style={{ minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${computeToken.border}` }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Amazon EC2</strong><span style={{ fontSize: 9.5, color: computeToken.textMuted }}>Two fixed instances</span></div><span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: computeToken.textMuted }}>Usage: {usage.toFixed(1)}s</span></header>
       <div style={{ flex: 1, padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
         <div style={{ display: "flex", gap: 9, flex: 1 }}><ServerTower index={0} requests={requests.filter((_, index) => index % 2 === 0)} /><ServerTower index={1} requests={requests.filter((_, index) => index % 2 === 1)} /></div>
         <p style={{ margin: 0, color: computeToken.textMuted, fontSize: 10, lineHeight: 1.4, textAlign: "center" }}>Requests split across two servers. Both stay provisioned between requests.</p>
@@ -1907,29 +1927,38 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
   const { spend } = useIllustrativeSpend(el.spendStart ?? 3.1, el.spendRatePerSecond ?? 0.00055, "bursts", el.activeDutyCycle ?? 0.42)
   const requests = useDemoRequests()
   const active = requests.length > 0
+  const [usage, setUsage] = useState(0)
+  const lastTick = useRef(Date.now())
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const now = Date.now()
+      const elapsed = (now - lastTick.current) / 1000
+      lastTick.current = now
+      if (active) setUsage((current) => current + elapsed * requests.length)
+    }, 100)
+    return () => window.clearInterval(timer)
+  }, [active, requests.length])
+  const instanceCount = Math.ceil(requests.length / 3)
   return (
     <div style={{ width: "100%", height: "100%", border: `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: computeToken.surface, color: computeToken.text, overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
-      <header style={{ minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${computeToken.border}` }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Vercel Functions</strong><span style={{ fontSize: 9.5, color: computeToken.textMuted }}>Fluid compute</span></div><span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: computeToken.textMuted }}>Usage: {active ? `${requests.length}.0s` : "0.0s"}</span></header>
-      <div style={{ flex: 1, padding: "16px 15px", display: "flex", flexDirection: "column", gap: 14 }}>
-        {[0, 1].map((instance) => {
-          const row = requests.filter((_, index) => index % 2 === instance)
-          return (
-            <div key={instance} style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
-                <span style={{ fontFamily: "var(--font-mono)", color: computeToken.textSecondary }}>fluid-instance-{instance + 1}</span>
-                <span style={{ color: computeToken.textMuted }}>{row.length ? `${row.length} active` : "ready"}</span>
+      <header style={{ minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${computeToken.border}` }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Vercel Functions</strong><span style={{ fontSize: 9.5, color: computeToken.textMuted }}>Fluid compute</span></div><span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: computeToken.textMuted }}>Usage: {usage.toFixed(1)}s</span></header>
+      <div style={{ flex: 1, padding: "16px 15px", display: "flex", flexDirection: "column", gap: 13 }}>
+        {!active ? (
+          <div style={{ margin: "auto", maxWidth: 230, textAlign: "center", color: computeToken.textMuted, display: "flex", flexDirection: "column", alignItems: "center", gap: 7 }}><span style={{ width: 8, height: 8, borderRadius: 99, background: computeToken.borderStrong }} /><strong style={{ color: computeToken.textSecondary, fontSize: 11 }}>No active instances</strong><span style={{ fontSize: 9.5, lineHeight: 1.4 }}>Run a request to create the first Fluid instance.</span></div>
+        ) : (
+          Array.from({ length: instanceCount }, (_, instance) => {
+            const row = requests.slice(instance * 3, instance * 3 + 3)
+            return (
+              <div key={instance} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}><span style={{ fontFamily: "var(--font-mono)", color: computeToken.textSecondary }}>fluid-instance-{instance + 1}</span><span style={{ color: computeToken.textMuted }}>{row.length} active</span></div>
+                <div style={{ minHeight: 43, borderRadius: 7, background: "oklch(0.18 0 0)", padding: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+                  {row.map((request, index) => <i key={request.id} style={{ height: 6, marginLeft: `${index * 10}%`, width: `${94 - index * 10}%`, borderRadius: 99, background: request.color }} />)}
+                </div>
               </div>
-              <div style={{ minHeight: 42, borderRadius: 7, background: "oklch(0.18 0 0)", padding: 6, display: "flex", flexDirection: "column", gap: 4 }}>
-                {row.length === 0 ? (
-                  <i style={{ height: 5, margin: "12px 0", borderRadius: 99, background: "oklch(0.3 0 0)" }} />
-                ) : (
-                  row.map((request, index) => <i key={request.id} style={{ height: 5, marginLeft: `${8 + index * 11}%`, width: `${82 - index * 8}%`, borderRadius: 99, background: request.color }} />)
-                )}
-              </div>
-            </div>
-          )
-        })}
-        <p style={{ margin: "auto 0 0", color: computeToken.textMuted, fontSize: 10, lineHeight: 1.4, textAlign: "center" }}>Concurrent requests share warm instances. Compute scales with active work.</p>
+            )
+          })
+        )}
+        {active && <p style={{ margin: "auto 0 0", color: computeToken.textMuted, fontSize: 10, lineHeight: 1.4, textAlign: "center" }}>Up to three concurrent requests reuse each warm instance.</p>}
       </div>
       <footer style={{ padding: "11px 16px 13px", borderTop: `1px solid ${computeToken.border}`, display: "flex", justifyContent: "center" }}><SpendDisplay amount={spend} rateLabel={active ? "active compute spend" : "spend paused"} /></footer>
     </div>
