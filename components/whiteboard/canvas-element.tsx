@@ -1,23 +1,22 @@
 "use client"
 
 import { memo, useState, useLayoutEffect, useEffect, useRef, useMemo } from "react"
-import { Play, Loader2, Check, RotateCw, Lock, ChevronDown, ChevronRight, Folder, FileText, SquareTerminal, ExternalLink, Waypoints, Server, Send, Zap } from "lucide-react"
+import { Play, Loader2, Check, RotateCw, ChevronDown, ChevronRight, Folder, FileText, SquareTerminal, ExternalLink, Waypoints, Server, Send, Zap } from "lucide-react"
 import type { AgentFile, CanvasElement, RunPhase } from "@/lib/whiteboard/types"
 import { getBounds } from "@/lib/whiteboard/geometry"
 import { getCodeTheme, tokenizeLine } from "@/lib/whiteboard/code-themes"
 import { createElement } from "@/lib/whiteboard/factory"
 import { useWhiteboard } from "@/lib/whiteboard/store"
-  import { getApiContext, getConnectedCode, detectWebsiteTemplate, METHOD_COLORS, DEMO_ORIGIN, type ApiContext } from "@/lib/whiteboard/workflow"
-import { WebsitePage, type WebsiteTemplate } from "@/components/whiteboard/website-templates"
+import { getApiContext, METHOD_COLORS, type ApiContext } from "@/lib/whiteboard/workflow"
 import { channelsForFiles, channelById, type EveChannelMeta } from "@/lib/whiteboard/eve-templates"
 import { GATEWAY_MODELS, gatewayModelById, DEFAULT_GATEWAY_MODEL } from "@/lib/whiteboard/ai-gateway-models"
 import { ChannelChat, CHANNEL_UI_SCALE, s } from "@/components/whiteboard/channel-chat"
 import { ScrollBox } from "@/components/whiteboard/scroll-box"
 
 /**
- * Resolves the upstream API context for a workflow node (website / server) by
- * reading the current project's elements + connections from the store. Lets a
- * node reflect the API route or endpoint defined by whatever comes before it.
+ * Resolves the upstream API context for a workflow node (server) by reading
+ * the current project's elements + connections from the store. Lets a node
+ * reflect the API route or endpoint defined by whatever comes before it.
  */
 function useApiContext(el: CanvasElement): ApiContext | null {
   const elements = useWhiteboard((s) => (s.projects.find((p) => p.id === s.currentId) ?? s.projects[0]).elements)
@@ -30,27 +29,13 @@ function useApiContext(el: CanvasElement): ApiContext | null {
   }, [el, elements, connections])
 }
 
-/**
- * The website shell driven by the code block this node is connected to (in
- * either direction). Returns null when smart connect is off or nothing in the
- * flow defines a code block, so the node falls back to its own static template.
- */
-function useConnectedWebsiteTemplate(el: CanvasElement): WebsiteTemplate | null {
-  const elements = useWhiteboard((s) => (s.projects.find((p) => p.id === s.currentId) ?? s.projects[0]).elements)
-  const connections = useWhiteboard((s) => (s.projects.find((p) => p.id === s.currentId) ?? s.projects[0]).connections)
-  return useMemo(() => {
-    if (el.smartConnect === false) return null
-    const code = getConnectedCode(el, elements, connections)
-    return code ? (detectWebsiteTemplate(code) as WebsiteTemplate) : null
-  }, [el, elements, connections])
-}
-
 // Keeps a code/terminal block's height fit to its content. Measures the natural
 // height of the block body and writes it back to the element so selection,
 // resize handles and hit-testing all stay in sync.
-function useFitHeight(el: CanvasElement, ref: React.RefObject<HTMLDivElement | null>) {
+function useFitHeight(el: CanvasElement, ref: React.RefObject<HTMLDivElement | null>, enabled = true) {
   const update = useWhiteboard((s) => s.update)
   useLayoutEffect(() => {
+    if (!enabled) return
     const node = ref.current
     if (!node) return
     let raf = 0
@@ -75,6 +60,7 @@ function useFitHeight(el: CanvasElement, ref: React.RefObject<HTMLDivElement | n
     }
     // width/text/theme/title/formatting all affect wrapping and therefore height
   }, [
+    enabled,
     el.id,
     el.height,
     el.width,
@@ -96,6 +82,7 @@ export const CanvasElementView = memo(function CanvasElementView({ el }: { el: C
   const editing = useWhiteboard((s) => s.editingId === el.id)
   const connections = useWhiteboard((s) => (s.projects.find((p) => p.id === s.currentId) ?? s.projects[0]).connections)
   const active = phase === "running"
+  const isSnapTarget = useWhiteboard((s) => s.snapTargetId === el.id)
   const isLinear = el.type === "arrow" || el.type === "line"
   const wrapperStyle: React.CSSProperties = {
     position: "absolute",
@@ -116,8 +103,8 @@ export const CanvasElementView = memo(function CanvasElementView({ el }: { el: C
     width: "100%",
     height: "100%",
     borderRadius: el.rounded ? 12 : 2,
-    outline: active ? "2px solid #0070f3" : undefined,
-    outlineOffset: active ? 3 : undefined,
+    outline: active || isSnapTarget ? "2px solid #0070f3" : undefined,
+    outlineOffset: active || isSnapTarget ? 3 : undefined,
     boxShadow: active ? "0 0 0 6px rgba(0,112,243,0.18)" : undefined,
     transition: "box-shadow 0.2s ease, outline-color 0.2s ease",
     // hide underlying content while editing so the transparent editor overlay
@@ -804,8 +791,6 @@ function renderContent(el: CanvasElement, b: { width: number; height: number }, 
       return <CodeView el={el} />
     case "terminal":
       return <TerminalView el={el} />
-    case "website":
-      return <WebsiteView el={el} phase={phase} />
     case "server":
       return <ServerView el={el} phase={phase} />
     case "filetree":
@@ -904,15 +889,26 @@ function ShapeSvg({ el, b }: { el: CanvasElement; b: { width: number; height: nu
   )
 }
 
+// Treat any sub-pixel dimension as exactly 0. Axis-aligned lines/arrows can
+// arrive with a near-zero (but not exactly 0) width or height due to
+// floating-point residue upstream (e.g. cos/sin of a computed angle) — an
+// unclamped tiny value produces a degenerate near-zero-width SVG viewBox
+// that browsers render as invisible instead of falling back to the 1px guard.
+function snapNearZero(n: number) {
+  return Math.abs(n) < 1e-6 ? 0 : n
+}
+
 function LineSvg({ el }: { el: CanvasElement }) {
+  const width = snapNearZero(el.width)
+  const height = snapNearZero(el.height)
   // el.width / el.height may be negative; getBounds normalized the wrapper box,
   // so recompute local endpoints inside the normalized box.
-  const x1 = el.width < 0 ? Math.abs(el.width) : 0
-  const y1 = el.height < 0 ? Math.abs(el.height) : 0
-  const x2 = el.width < 0 ? 0 : el.width
-  const y2 = el.height < 0 ? 0 : el.height
-  const w = Math.abs(el.width) || 1
-  const h = Math.abs(el.height) || 1
+  const x1 = width < 0 ? Math.abs(width) : 0
+  const y1 = height < 0 ? Math.abs(height) : 0
+  const x2 = width < 0 ? 0 : width
+  const y2 = height < 0 ? 0 : height
+  const w = Math.abs(width) || 1
+  const h = Math.abs(height) || 1
   const markerId = `arrow-${el.id}`
   return (
     <svg width="100%" height="100%" viewBox={`0 0 ${w} ${h}`} style={{ overflow: "visible", display: "block" }}>
@@ -947,7 +943,11 @@ function LineSvg({ el }: { el: CanvasElement }) {
 
 function TextView({ el }: { el: CanvasElement }) {
   const ref = useRef<HTMLDivElement>(null)
-  useFitHeight(el, ref)
+  // While editing, the visible textarea in ElementEditor measures itself and
+  // owns the live height — this hidden view's own measurement (a <div> with
+  // slightly different metrics) would otherwise fight it and loop forever.
+  const editing = useWhiteboard((s) => s.editingId === el.id)
+  useFitHeight(el, ref, !editing)
   const fontSize = el.fontSize || 24
   return (
     <div
@@ -998,7 +998,11 @@ function CardView({ el }: { el: CanvasElement }) {
           fontFamily: "var(--font-sans)",
           fontWeight: 600,
           fontSize: 18,
-          color: "#000",
+          lineHeight: "24px",
+          color: el.title ? "#000" : "#9ca3af",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          overflowWrap: "anywhere",
         }}
       >
         {el.title || "Card title"}
@@ -1009,9 +1013,10 @@ function CardView({ el }: { el: CanvasElement }) {
           fontFamily: "var(--font-sans)",
           fontSize: 14,
           lineHeight: 1.5,
-          color: "#666",
+          color: el.text ? "#444" : "#9ca3af",
           whiteSpace: "pre-wrap",
           wordBreak: "break-word",
+          overflowWrap: "anywhere",
           flex: 1,
         }}
       >
@@ -1459,193 +1464,6 @@ function TerminalView({ el }: { el: CanvasElement }) {
   )
 }
 
-function prettyDomain(url: string): string {
-  try {
-    const u = new URL(url.includes("://") ? url : `https://${url}`)
-    return u.hostname.replace(/^www\./, "")
-  } catch {
-    return url || "example.com"
-  }
-}
-
-function WebsiteView({ el, phase }: { el: CanvasElement; phase: RunPhase | undefined }) {
-  const api = useApiContext(el)
-  // The connected code block drives which shell we render; only when there is
-  // no code in the flow (or smart connect is off) do we use the static field.
-  const inferred = useConnectedWebsiteTemplate(el)
-  const template: WebsiteTemplate = inferred ?? el.websiteTemplate ?? "marketing"
-  // The address bar reflects the upstream route when connected, otherwise a
-  // simulated deployment URL — we never surface localhost.
-  const url = api ? api.url : el.url || DEMO_ORIGIN
-  const domain = prettyDomain(url)
-  const loading = phase === "running"
-  // A page only shows real, populated content once the workflow has actually
-  // run (phase "done"). Until then it renders the empty shell so you can see
-  // the fetch happen when you press Run.
-  const hasRun = phase === "done"
-  return (
-    <div
-      style={{
-        width: "100%",
-        height: "100%",
-        borderRadius: el.rounded ? 12 : 2,
-        background: "#ffffff",
-        border: "1px solid #eaeaea",
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-        boxShadow: "none",
-      }}
-    >
-      {/* browser chrome */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: "0 12px",
-          height: 40,
-          background: "#f7f7f7",
-          borderBottom: "1px solid #eaeaea",
-          flexShrink: 0,
-        }}
-      >
-        <WindowDots />
-        <div
-          style={{
-            flex: 1,
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            height: 24,
-            padding: "0 10px",
-            borderRadius: 9999,
-            background: "#ffffff",
-            border: "1px solid #eaeaea",
-            fontFamily: "var(--font-sans)",
-            fontSize: 12,
-            color: "#666",
-            minWidth: 0,
-          }}
-        >
-          <Lock size={11} />
-          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{url}</span>
-        </div>
-        <RotateCw size={13} color={loading ? "#0070f3" : "#999"} className={loading ? "animate-spin" : undefined} />
-      </div>
-
-      {/* loading bar */}
-      <div style={{ height: 2, background: "transparent", flexShrink: 0, overflow: "hidden" }}>
-        {loading && <div style={{ height: "100%", width: "40%", background: "#0070f3", animation: "wb-load 1s linear infinite" }} />}
-      </div>
-
-      {template === "api" ? (
-        api && hasRun ? (
-          <ApiPage api={api} loading={loading} />
-        ) : (
-          <div
-            style={{
-              flex: 1,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: 16,
-              fontFamily: "var(--font-mono)",
-              fontSize: 11,
-              color: "#aaa",
-              textAlign: "center",
-              opacity: loading ? 0.35 : 1,
-            }}
-          >
-            {api ? "Run the workflow to fetch a response…" : "Waiting for an upstream endpoint…"}
-          </div>
-        )
-      ) : (
-        <WebsitePage template={template} api={api} domain={domain} loading={loading} hasRun={hasRun} />
-      )}
-    </div>
-  )
-}
-
-/** Raw API response view — what a browser shows when you hit a JSON endpoint. */
-function ApiPage({ api, loading }: { api: ApiContext; loading: boolean }) {
-  return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, opacity: loading ? 0.35 : 1, transition: "opacity 0.25s ease" }}>
-      {/* status strip */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          padding: "8px 14px",
-          borderBottom: "1px solid #f0f0f0",
-          flexShrink: 0,
-        }}
-      >
-        <span
-          style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: 10,
-            fontWeight: 700,
-            color: METHOD_COLORS[api.method] ?? "#666",
-            border: `1px solid ${METHOD_COLORS[api.method] ?? "#ccc"}`,
-            borderRadius: 4,
-            padding: "1px 5px",
-          }}
-        >
-          {api.method}
-        </span>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "#333" }}>{api.path}</span>
-        <span style={{ marginLeft: "auto", fontFamily: "var(--font-mono)", fontSize: 11, color: "#28c840" }}>200 OK</span>
-      </div>
-      {/* upstream chain trail */}
-      {api.chain.length > 0 && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            flexWrap: "wrap",
-            padding: "6px 14px",
-            borderBottom: "1px solid #f4f4f4",
-            background: "#fafafa",
-            fontFamily: "var(--font-mono)",
-            fontSize: 10,
-            color: "#888",
-            flexShrink: 0,
-          }}
-        >
-          <span style={{ color: "#aaa" }}>source</span>
-          {api.chain.map((label, i) => (
-            <span key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ color: "#555" }}>{label}</span>
-              {i < api.chain.length - 1 && <span style={{ color: "#ccc" }}>{"→"}</span>}
-            </span>
-          ))}
-        </div>
-      )}
-      {/* json body */}
-      <pre
-        style={{
-          margin: 0,
-          flex: 1,
-          overflow: "hidden",
-          padding: 14,
-          fontFamily: "var(--font-mono)",
-          fontSize: 12,
-          lineHeight: "18px",
-          color: "#1a1a1a",
-          background: "#fbfbfb",
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-        }}
-      >
-        {api.json}
-      </pre>
-    </div>
-  )
-}
-
 /**
  * A single 1U server sled — kept intentionally minimal: a thin bar with one
  * activity LED and a couple of subtle vent lines. The LED lights (and pulses)
@@ -1944,13 +1762,22 @@ function RequestDemoView({ el }: { el: CanvasElement }) {
 }
 
 function RequestTimeline({ requests, now, overloaded = false, compact = false }: { requests: DemoRequest[]; now: number; overloaded?: boolean; compact?: boolean }) {
+  const barHeight = 5
+  const rowStep = 8
+  const containerHeight = compact ? 28 : Math.max(46, requests.length * rowStep + 12)
+  // Bars stack from a shared vertical center rather than a fixed top offset,
+  // so the empty space above and below the stack stays equal no matter how
+  // many requests are active (a fixed top offset left the top gap constant
+  // while the bottom gap shrank/grew with the bar count).
+  const groupHeight = requests.length > 0 ? (requests.length - 1) * rowStep + barHeight : 0
+  const groupTop = (containerHeight - groupHeight) / 2
   return (
-  <div style={{ position: "relative", height: compact ? 28 : Math.max(46, requests.length * 8 + 12), border: `1px solid ${overloaded ? "#ef2b2d" : "#252525"}`, borderRadius: 8, background: "#111", overflow: "hidden" }}>
+  <div style={{ position: "relative", height: containerHeight, border: `1px solid ${overloaded ? "#ef2b2d" : "#252525"}`, borderRadius: 8, background: "#111", overflow: "hidden" }}>
       {requests.map((request, index) => {
         const progress = Math.min(Math.max((now - request.startedAt) / request.duration, 0), 1)
         const traceLeft = 100 - progress * 216
         return (
-          <span key={request.id} style={{ position: "absolute", top: 7 + index * 8, left: `${traceLeft}%`, width: "116%", height: 5, display: "flex", transition: "left 80ms linear" }}>
+          <span key={request.id} style={{ position: "absolute", top: groupTop + index * rowStep, left: `${traceLeft}%`, width: "116%", height: barHeight, display: "flex", transition: "left 80ms linear" }}>
             <i style={{ width: "12.5%", height: "100%", flexShrink: 0, borderRadius: "99px 0 0 99px", background: request.color }} />
             <i style={{ width: "75%", height: "100%", flexShrink: 0, background: request.color, opacity: 0.3 }} />
             <i style={{ width: "12.5%", height: "100%", flexShrink: 0, borderRadius: "0 99px 99px 0", background: request.color }} />
@@ -2075,7 +1902,12 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
     <div style={{ width: "100%", height: "100%", border: el.showContainerBorder === false ? "none" : `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
       <header style={{ flexShrink: 0, minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Fluid</strong><span style={{ color: "#777", fontSize: 9.5 }}>Vercel Functions</span></div><span style={{ fontFamily: "var(--font-mono)", color: "#888", fontSize: 10 }}>Usage: <b style={{ color: "#ddd", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
       <div style={{ minHeight: 0, flex: 1, overflow: "hidden", padding: "12px 0", display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 12 }}>
-        {instanceIds.length > 0 && <div key={traces.at(-1)?.id} className="wb-compute-stack-in" style={{ display: "flex", flexDirection: "column", gap: 12 }}>{instanceIds.map((instance) => {
+        {/* No key here: each instance row below owns its own enter/exit fade
+            (from that instance's earliestStart), so this stack container
+            should persist across renders rather than remount — keying it on
+            the latest request would replay the fade-in for every already-
+            visible instance on every single call, not just a new one. */}
+        {instanceIds.length > 0 && <div className="wb-compute-stack-in" style={{ display: "flex", flexDirection: "column", gap: 12 }}>{instanceIds.map((instance) => {
           const row = traces.filter((trace) => trace.instance === instance)
           const latestEnd = Math.max(...row.map((trace) => trace.startedAt + trace.duration))
           const latestBillingEnd = Math.max(...row.map((trace) => trace.startedAt + trace.duration * FLUID_BILLING_FRACTION))
@@ -2149,7 +1981,10 @@ function ServerlessComputeView({ el }: { el: CanvasElement }) {
     <div style={{ width: "100%", height: "100%", border: el.showContainerBorder === false ? "none" : `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
       <header style={{ flexShrink: 0, minHeight: 58, padding: "8px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Serverless</strong><span style={{ color: "#777", fontSize: 9.5 }}>One request per instance</span></div><span style={{ fontFamily: "var(--font-mono)", color: "#888", fontSize: 10 }}>Usage: <b style={{ color: "#ddd", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
       <div style={{ minHeight: 0, flex: 1, overflow: "hidden", padding: "8px 0", display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 7 }}>
-        {visibleTraces.length > 0 && <div key={visibleTraces.at(-1)?.id} className="wb-compute-stack-in" style={{ display: "flex", flexDirection: "column", gap: 7 }}>{visibleTraces.map((trace) => {
+        {/* See FluidComputeView: no key here so the stack persists across
+            renders instead of remounting (and re-fading every visible row)
+            on each new request. */}
+        {visibleTraces.length > 0 && <div className="wb-compute-stack-in" style={{ display: "flex", flexDirection: "column", gap: 7 }}>{visibleTraces.map((trace) => {
           const billingEnd = trace.startedAt + trace.duration * FLUID_BILLING_FRACTION
           const latestEnd = billingEnd
           const rowUsage = Math.min(Math.max(now - trace.startedAt, 0), billingEnd - trace.startedAt) / 1000

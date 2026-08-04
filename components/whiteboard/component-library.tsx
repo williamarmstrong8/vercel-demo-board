@@ -7,7 +7,6 @@ import {
   Search,
   Code2,
   SquareTerminal,
-  Globe,
   Server,
   FolderTree,
   ArrowRight,
@@ -61,27 +60,11 @@ const ITEMS: LibraryItem[] = [
     category: "developer-tools",
   },
   {
-    id: "website",
-    icon: Globe,
-    label: "Website",
-    description: "Browser window frame with a URL bar.",
-    keywords: ["website", "browser", "web", "url", "page", "site"],
-    category: "deploy-scale",
-  },
-  {
     id: "server",
     icon: Server,
     label: "Server",
     description: "API endpoint node with method and response.",
     keywords: ["server", "api", "endpoint", "backend", "request", "http"],
-    category: "deploy-scale",
-  },
-  {
-    id: "requestdemo",
-    icon: Send,
-    label: "Request traffic",
-    description: "Send one or more requests into a compute comparison.",
-    keywords: ["request", "traffic", "run", "send", "simulation", "load"],
     category: "deploy-scale",
   },
   {
@@ -136,7 +119,6 @@ const ITEMS: LibraryItem[] = [
 
 // Icons used to sketch a template's flow inside its thumbnail.
 const NODE_ICONS: Partial<Record<ElementType, React.ComponentType<{ className?: string }>>> = {
-  website: Globe,
   code: Code2,
   server: Server,
   terminal: SquareTerminal,
@@ -151,12 +133,19 @@ const NODE_ICONS: Partial<Record<ElementType, React.ComponentType<{ className?: 
 
 type Section = "components" | "templates"
 
+// However many nodes a template has, the thumbnail only has room to sketch a
+// handful of glyphs before it either overflows the fixed-width card or reads
+// as visual noise — cap it and fold anything past the limit into a "+N" chip.
+const MAX_THUMBNAIL_ICONS = 4
+
 /**
  * A miniature "image" of the template's actual flow: the ordered node glyphs
- * (website → code → server → website) connected by arrows, drawn on a subtle
- * dotted mini-canvas so it reads like a shrunken board.
+ * connected by arrows, drawn on a subtle dotted mini-canvas so it reads like a
+ * shrunken board.
  */
 function FlowThumbnail({ template }: { template: WorkflowTemplate }) {
+  const overflow = template.nodes.length - MAX_THUMBNAIL_ICONS
+  const shown = overflow > 0 ? template.nodes.slice(0, MAX_THUMBNAIL_ICONS - 1) : template.nodes.slice(0, MAX_THUMBNAIL_ICONS)
   return (
     <div
       className="flex h-full min-h-[92px] w-full items-center justify-center gap-0.5 overflow-hidden rounded-lg border border-border bg-background px-1.5"
@@ -165,17 +154,24 @@ function FlowThumbnail({ template }: { template: WorkflowTemplate }) {
         backgroundSize: "10px 10px",
       }}
     >
-      {template.nodes.map((n, i) => {
+      {shown.map((n, i) => {
         const Icon = NODE_ICONS[n.type] ?? Square
         return (
           <span key={n.ref} className="flex items-center gap-0.5">
             <span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground">
               <Icon className="size-3" />
             </span>
-            {i < template.nodes.length - 1 && <ArrowRight className="size-2.5 shrink-0 text-muted-foreground/60" />}
+            {(i < shown.length - 1 || overflow > 0) && (
+              <ArrowRight className="size-2.5 shrink-0 text-muted-foreground/60" />
+            )}
           </span>
         )
       })}
+      {overflow > 0 && (
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-border bg-card text-[10px] font-medium text-muted-foreground">
+          +{overflow + 1}
+        </span>
+      )}
     </div>
   )
 }
@@ -352,7 +348,7 @@ export function ComponentLibrary() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={onInputKeyDown}
-                placeholder="Search components and templates���"
+                placeholder="Search components and templates…"
                 className="h-6 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
               />
               <button

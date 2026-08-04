@@ -10,7 +10,6 @@ export type Tool =
   | "card"
   | "code"
   | "terminal"
-  | "website"
   | "server"
   | "image"
   | "filetree"
@@ -32,7 +31,6 @@ export type ElementType =
   | "card"
   | "code"
   | "terminal"
-  | "website"
   | "server"
   | "image"
   | "filetree"
@@ -56,7 +54,7 @@ export interface AgentFile {
 export type CodeThemeId = "dark" | "light" | "monokai"
 
 // Node types that participate in workflows (can be connected & run in sequence).
-export const NODE_TYPES: ElementType[] = ["code", "terminal", "website", "server"]
+export const NODE_TYPES: ElementType[] = ["code", "terminal", "server"]
 export function isNodeType(t: ElementType): boolean {
   return NODE_TYPES.includes(t)
 }
@@ -99,14 +97,9 @@ export interface CanvasElement {
   // code / terminal block
   codeTheme?: CodeThemeId
   showRun?: boolean
-  // website / server node: when true (default) the node reflects the upstream
-  // API context; when false it keeps its own custom, static configuration.
+  // server node: when true (default) the node reflects the upstream API
+  // context; when false it keeps its own custom, static configuration.
   smartConnect?: boolean
-  // website node
-  url?: string
-  // website node page template — the shell renders when nothing feeds the node,
-  // and it populates when upstream API data flows in.
-  websiteTemplate?: "marketing" | "dashboard" | "login" | "products" | "api"
   // server node
   method?: HttpMethod
   endpoint?: string

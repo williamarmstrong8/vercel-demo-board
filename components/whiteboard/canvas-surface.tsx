@@ -16,7 +16,7 @@ import { GRID_SIZE, SNAP_THRESHOLD, type CanvasElement } from "@/lib/whiteboard/
 import { CanvasElementView } from "./canvas-element"
 import { SelectionOverlay, type HandleId } from "./selection-overlay"
 import { ElementEditor } from "./element-editor"
-import { ConnectionCurves, ConnectionHandles } from "./workflow-connections"
+import { ConnectionCurves } from "./workflow-connections"
 
 type Gesture =
   | { mode: "idle" }
@@ -37,12 +37,94 @@ type Gesture =
     }
   | { mode: "marquee"; startScreen: { x: number; y: number }; additive: boolean }
 
+// Exact unit vectors for each 45° octant. Deriving these from cos/sin of a
+// computed angle (e.g. Math.cos(Math.PI / 2)) leaves tiny floating-point
+// residue instead of a clean 0 on axis-aligned directions — which then slips
+// past the `|| 1` zero-guard in LineSvg's viewBox math and renders a
+// degenerate (near-zero-width) SVG that the browser draws as invisible. A
+// lookup table sidesteps trig error entirely so horizontal/vertical drags
+// land on an exact 0 component.
+const OCTANT_UNIT_VECTORS: Array<[number, number]> = [
+  [1, 0],
+  [1, 1],
+  [0, 1],
+  [-1, 1],
+  [-1, 0],
+  [-1, -1],
+  [0, -1],
+  [1, -1],
+]
+
 function snapVectorTo45(x: number, y: number) {
   const length = Math.hypot(x, y)
   if (length === 0) return { x: 0, y: 0 }
   const increment = Math.PI / 4
-  const angle = Math.round(Math.atan2(y, x) / increment) * increment
-  return { x: Math.cos(angle) * length, y: Math.sin(angle) * length }
+  const octant = (Math.round(Math.atan2(y, x) / increment) + 8) % 8
+  const [ux, uy] = OCTANT_UNIT_VECTORS[octant]
+  const norm = Math.hypot(ux, uy) || 1
+  return { x: (ux / norm) * length, y: (uy / norm) * length }
+}
+
+// Screen-space gap (in CSS pixels) kept between a snapped arrow endpoint and
+// the shape it's attaching to, so the arrow visibly points at the shape
+// instead of touching/overlapping its stroke. Divided by zoom at each call
+// site to convert to world units, so the gap looks the same size on screen
+// at any zoom level.
+const SNAP_GAP_SCREEN_PX = 10
+
+// Point just outside the OUTLINE of a bounding box, near the nearest edge to
+// an arbitrary point — used so an arrow/line dragged near a shape snaps its
+// endpoint just off that shape's border (by `padding`) rather than exactly on
+// it or wherever the cursor happens to be. Outside the box, the nearest edge
+// point is pushed further out along the cursor's direction from the box;
+// inside, we project to whichever edge is closest and push out along that
+// edge's normal.
+function nearestPerimeterPoint(
+  b: { x: number; y: number; width: number; height: number },
+  px: number,
+  py: number,
+  padding = 0,
+) {
+  const left = b.x
+  const right = b.x + b.width
+  const top = b.y
+  const bottom = b.y + b.height
+  const inside = px > left && px < right && py > top && py < bottom
+  if (!inside) {
+    const cx = Math.min(Math.max(px, left), right)
+    const cy = Math.min(Math.max(py, top), bottom)
+    const dx = px - cx
+    const dy = py - cy
+    const dist = Math.hypot(dx, dy)
+    if (dist > 1e-3) {
+      return { x: cx + (dx / dist) * padding, y: cy + (dy / dist) * padding }
+    }
+    px = cx
+    py = cy
+  }
+  const dLeft = px - left
+  const dRight = right - px
+  const dTop = py - top
+  const dBottom = bottom - py
+  const closest = Math.min(dLeft, dRight, dTop, dBottom)
+  if (closest === dLeft) return { x: left - padding, y: py }
+  if (closest === dRight) return { x: right + padding, y: py }
+  if (closest === dTop) return { x: px, y: top - padding }
+  return { x: px, y: bottom + padding }
+}
+
+// Shape/block under the cursor that an in-progress arrow or line can snap to.
+// Other arrows/lines never act as snap targets, and the element currently
+// being drawn is excluded so it can't snap to itself mid-drag.
+function snapHitTest(wx: number, wy: number, els: CanvasElement[], excludeId?: string): CanvasElement | null {
+  for (let i = els.length - 1; i >= 0; i--) {
+    const el = els[i]
+    if (el.id === excludeId) continue
+    if (el.type === "arrow" || el.type === "line") continue
+    const b = getBounds(el)
+    if (wx >= b.x && wx <= b.x + b.width && wy >= b.y && wy <= b.y + b.height) return el
+  }
+  return null
 }
 
 function distToSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number) {
@@ -191,7 +273,6 @@ export function CanvasSurface() {
       else if (e.key === "c" || e.key === "6") store.setTool("card")
       else if (e.key === "k") store.setTool("code")
       else if (e.key === "e") store.setTool("terminal")
-      else if (e.key === "w") store.setTool("website")
       else if (e.key === "s") store.setTool("server")
       else if (e.key === "g") store.setTool("filetree")
     }
@@ -210,19 +291,32 @@ export function CanvasSurface() {
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
       const store = useWhiteboard.getState()
-      // dragging a new workflow connection
-      if (store.connectingFrom) {
-        const cam0 = (store.projects.find((p) => p.id === store.currentId) ?? store.projects[0]).camera
-        const s0 = toScreen(e)
-        store.updateConnectDrag(screenToWorld(s0.x, s0.y, cam0))
-        return
-      }
       const g = gesture.current
-      if (g.mode === "idle") return
       const cam = (store.projects.find((p) => p.id === store.currentId) ?? store.projects[0]).camera
       const els = (store.projects.find((p) => p.id === store.currentId) ?? store.projects[0]).elements
       const screen = toScreen(e)
       const world = screenToWorld(screen.x, screen.y, cam)
+
+      // Arrow/line snap-target highlight: whatever shape is under the cursor
+      // lights up so it's clear the endpoint will snap to its outline. Runs
+      // while drawing a new arrow/line (idle + create) and while dragging an
+      // existing arrow/line's start or end handle to reattach it.
+      const draggingLineEndpoint =
+        g.mode === "resize" &&
+        (g.handle === "start" || g.handle === "end") &&
+        g.origEls.length === 1 &&
+        (g.origEls[0].type === "arrow" || g.origEls[0].type === "line")
+      if ((store.tool === "arrow" || store.tool === "line") && (g.mode === "idle" || g.mode === "create")) {
+        const hit = snapHitTest(world.x, world.y, els, g.mode === "create" ? g.id : undefined)
+        if (store.snapTargetId !== (hit?.id ?? null)) store.setSnapTarget(hit?.id ?? null)
+      } else if (draggingLineEndpoint) {
+        const hit = snapHitTest(world.x, world.y, els, g.origEls[0].id)
+        if (store.snapTargetId !== (hit?.id ?? null)) store.setSnapTarget(hit?.id ?? null)
+      } else if (store.snapTargetId) {
+        store.setSnapTarget(null)
+      }
+
+      if (g.mode === "idle") return
       const thr = SNAP_THRESHOLD / cam.zoom
 
       if (g.mode === "pan") {
@@ -234,9 +328,10 @@ export function CanvasSurface() {
       } else if (g.mode === "create") {
         let w = world.x - g.start.x
         let h = world.y - g.start.y
+        const creating = els.find((el) => el.id === g.id)
+        const isLinear = creating?.type === "arrow" || creating?.type === "line"
         if (e.shiftKey) {
-          const creating = els.find((el) => el.id === g.id)
-          if (creating?.type === "arrow" || creating?.type === "line") {
+          if (isLinear) {
             const snapped = snapVectorTo45(w, h)
             w = snapped.x
             h = snapped.y
@@ -244,6 +339,16 @@ export function CanvasSurface() {
             const size = Math.max(Math.abs(w), Math.abs(h))
             w = Math.sign(w || 1) * size
             h = Math.sign(h || 1) * size
+          }
+        } else if (isLinear && store.snapTargetId) {
+          // endpoint hovering a shape: snap it to that shape's outline instead
+          // of the raw cursor position
+          const target = els.find((el) => el.id === store.snapTargetId)
+          if (target) {
+            const tb = getBounds(target)
+            const snapped = nearestPerimeterPoint(tb, world.x, world.y, SNAP_GAP_SCREEN_PX / cam.zoom)
+            w = snapped.x - g.start.x
+            h = snapped.y - g.start.y
           }
         }
         store.update([g.id], { width: w, height: h })
@@ -280,7 +385,7 @@ export function CanvasSurface() {
           store.update([el.id], { x: g.origins[el.id].x + dx, y: g.origins[el.id].y + dy })
         }
       } else if (g.mode === "resize") {
-        handleResize(g, world, store, thr, e.shiftKey)
+        handleResize(g, world, store, thr, e.shiftKey, cam.zoom)
       } else if (g.mode === "marquee") {
         const x = Math.min(g.startScreen.x, screen.x)
         const y = Math.min(g.startScreen.y, screen.y)
@@ -308,16 +413,6 @@ export function CanvasSurface() {
 
     const onUp = (e: PointerEvent) => {
       const store = useWhiteboard.getState()
-      // finish a workflow connection drag
-      if (store.connectingFrom) {
-        const cam = (store.projects.find((p) => p.id === store.currentId) ?? store.projects[0]).camera
-        const els = (store.projects.find((p) => p.id === store.currentId) ?? store.projects[0]).elements
-        const s = toScreen(e)
-        const world = screenToWorld(s.x, s.y, cam)
-        const target = hitTest(world.x, world.y, els)
-        store.finishConnect(target && target.id !== store.connectingFrom ? target.id : null)
-        return
-      }
       const g = gesture.current
       if (g.mode === "create") {
         const els = (store.projects.find((p) => p.id === store.currentId) ?? store.projects[0]).elements
@@ -337,6 +432,7 @@ export function CanvasSurface() {
       }
       if (g.mode === "marquee") setMarquee(null)
       setGuides([])
+      store.setSnapTarget(null)
       gesture.current = { mode: "idle" }
     }
 
@@ -346,7 +442,7 @@ export function CanvasSurface() {
       window.removeEventListener("pointermove", onMove)
       window.removeEventListener("pointerup", onUp)
     }
-  }, [toScreen, hitTest])
+  }, [toScreen])
 
   const handleResize = (
     g: Extract<Gesture, { mode: "resize" }>,
@@ -354,14 +450,30 @@ export function CanvasSurface() {
     store: ReturnType<typeof useWhiteboard.getState>,
     thr: number,
     lockAngle: boolean,
+    zoom: number,
   ) => {
     // line endpoints
     if ((g.handle === "start" || g.handle === "end") && g.origEls.length === 1) {
       const el = g.origEls[0]
-      const gx = snapToGrid(world.x, GRID_SIZE)
-      const gy = snapToGrid(world.y, GRID_SIZE)
-      let px = Math.abs(gx - world.x) < SNAP_THRESHOLD ? gx : world.x
-      let py = Math.abs(gy - world.y) < SNAP_THRESHOLD ? gy : world.y
+      const isLinear = el.type === "arrow" || el.type === "line"
+      const snapTarget =
+        isLinear && !lockAngle && store.snapTargetId
+          ? store.current().elements.find((e) => e.id === store.snapTargetId)
+          : null
+      let px: number
+      let py: number
+      if (snapTarget) {
+        // reattaching to a highlighted shape: land just off its outline
+        // instead of exactly on it or the raw cursor position
+        const snapped = nearestPerimeterPoint(getBounds(snapTarget), world.x, world.y, SNAP_GAP_SCREEN_PX / zoom)
+        px = snapped.x
+        py = snapped.y
+      } else {
+        const gx = snapToGrid(world.x, GRID_SIZE)
+        const gy = snapToGrid(world.y, GRID_SIZE)
+        px = Math.abs(gx - world.x) < SNAP_THRESHOLD ? gx : world.x
+        py = Math.abs(gy - world.y) < SNAP_THRESHOLD ? gy : world.y
+      }
       if (lockAngle && (el.type === "arrow" || el.type === "line")) {
         const anchorX = g.handle === "start" ? el.x + el.width : el.x
         const anchorY = g.handle === "start" ? el.y + el.height : el.y
@@ -491,8 +603,20 @@ export function CanvasSurface() {
     }
 
     // creation tools
-    if (["rectangle", "ellipse", "diamond", "arrow", "line", "text", "card", "code", "terminal", "website", "server", "filetree", "aigateway", "ec2", "fluidcompute", "serverlesscompute", "computecomparison", "requestdemo"].includes(tool)) {
-      const el = createElement(tool, world.x, world.y, {
+    if (["rectangle", "ellipse", "diamond", "arrow", "line", "text", "card", "code", "terminal", "server", "filetree", "aigateway", "ec2", "fluidcompute", "serverlesscompute", "computecomparison", "requestdemo"].includes(tool)) {
+      // starting an arrow/line on a highlighted shape snaps the start point
+      // just off that shape's outline rather than the raw click position
+      let startX = world.x
+      let startY = world.y
+      if ((tool === "arrow" || tool === "line") && store.snapTargetId) {
+        const target = elements.find((el) => el.id === store.snapTargetId)
+        if (target) {
+          const snapped = nearestPerimeterPoint(getBounds(target), world.x, world.y, SNAP_GAP_SCREEN_PX / camera.zoom)
+          startX = snapped.x
+          startY = snapped.y
+        }
+      }
+      const el = createElement(tool, startX, startY, {
         stroke: "#000000",
         fill: tool === "card" ? "#ffffff" : "transparent",
         strokeWidth: tool === "card" ? 1 : 2,
@@ -502,7 +626,6 @@ export function CanvasSurface() {
         tool === "card" ||
         tool === "code" ||
         tool === "terminal" ||
-        tool === "website" ||
         tool === "server" ||
         tool === "filetree" ||
         tool === "aigateway" ||
@@ -527,7 +650,7 @@ export function CanvasSurface() {
         gesture.current = { mode: "idle" }
         if (tool === "text") store.setEditing(el.id)
       } else {
-        gesture.current = { mode: "create", id: el.id, start: { x: world.x, y: world.y } }
+        gesture.current = { mode: "create", id: el.id, start: { x: startX, y: startY } }
       }
       return
     }
@@ -669,7 +792,6 @@ export function CanvasSurface() {
           <CanvasElementView key={el.id} el={el} />
         ))}
         {editingId && <ElementEditor id={editingId} />}
-        <ConnectionHandles />
       </div>
 
       <SelectionOverlay

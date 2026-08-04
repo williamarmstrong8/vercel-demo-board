@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useLayoutEffect, useRef } from "react"
 import { useWhiteboard } from "@/lib/whiteboard/store"
 import { getBounds } from "@/lib/whiteboard/geometry"
 import { getCodeTheme } from "@/lib/whiteboard/code-themes"
@@ -37,6 +37,25 @@ export function ElementEditor({ id }: { id: string }) {
     }
   }, [id])
 
+  // Grow the textarea to fit its content synchronously, in the same paint as
+  // the keystroke. The box otherwise relied on the hidden static TextView's
+  // ResizeObserver (canvas-element.tsx's useFitHeight) to notice the new line
+  // and write the height back a frame later — while that round trip was in
+  // flight, the fixed-height + overflow:hidden textarea would scroll its
+  // caret into view and clip the lines above it, reading as text vanishing.
+  useLayoutEffect(() => {
+    if (!el || el.type !== "text") return
+    const t = textRef.current
+    if (!t) return
+    t.style.height = "auto"
+    const minH = Math.round((el.fontSize || 24) * 1.3)
+    const next = Math.max(minH, Math.ceil(t.scrollHeight))
+    t.style.height = `${next}px`
+    if (Math.abs(next - el.height) > 1) {
+      update([id], { height: next })
+    }
+  }, [el, id, update])
+
   if (!el) return null
   const b = getBounds(el)
 
@@ -62,10 +81,7 @@ export function ElementEditor({ id }: { id: string }) {
         ref={textRef}
         value={el.text || ""}
         onPointerDown={(e) => e.stopPropagation()}
-        onChange={(e) => {
-          // height is driven by the underlying TextView via useFitHeight
-          update([id], { text: e.target.value })
-        }}
+        onChange={(e) => update([id], { text: e.target.value })}
         onBlur={() => {
           if (!settled.current) {
             // spurious early blur right after placement — keep editing
@@ -226,10 +242,13 @@ export function ElementEditor({ id }: { id: string }) {
         style={{
           border: "none",
           outline: "none",
-          padding: "12px 16px 6px",
+          // padding + line-height match CardView's static title div exactly —
+          // any mismatch there reads as the text jumping when edit starts
+          padding: "12px 16px 8px",
           fontFamily: "var(--font-sans)",
           fontWeight: 600,
           fontSize: 18,
+          lineHeight: "24px",
           color: "#000",
           background: "transparent",
         }}

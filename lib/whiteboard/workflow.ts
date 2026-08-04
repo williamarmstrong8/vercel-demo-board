@@ -4,9 +4,9 @@ import type { CanvasElement, Connection, HttpMethod } from "./types"
 export const DEMO_ORIGIN = "https://demo-project.vercel.app"
 
 /**
- * Resolved "what comes before me" context for a workflow node. Website and
- * server nodes use this to visualize the API route defined by an upstream
- * code block (or the endpoint defined by an upstream server node).
+ * Resolved "what comes before me" context for a workflow node. Server nodes
+ * use this to visualize the API route defined by an upstream code block (or
+ * the endpoint defined by an upstream server node).
  */
 export interface ApiContext {
   method: HttpMethod
@@ -30,8 +30,6 @@ export function nodeLabel(el: CanvasElement): string {
       return el.title || "terminal"
     case "server":
       return `${el.method || "GET"} ${el.endpoint || "/api/hello"}`
-    case "website":
-      return el.url ? el.url : "website"
     default:
       return el.type
   }
@@ -184,59 +182,6 @@ export function getApiContext(
     }
   }
 
-  return null
-}
-
-/** Website "shells" a code block can drive. Mirrors WebsiteTemplate minus "api". */
-export type InferredWebsite = "marketing" | "dashboard" | "login" | "products"
-
-/**
- * Infer which website shell best represents a code block's purpose from its
- * title + source. This is what lets the website nodes in a flow reflect the
- * code block: swap the code for an auth handler and the pages become login
- * screens; swap it for a products query and they become a storefront.
- */
-export function detectWebsiteTemplate(code: CanvasElement): InferredWebsite {
-  const hay = `${code.title ?? ""}\n${code.text ?? ""}`.toLowerCase()
-  if (/\bauth|login|sign[\s-]?in|signin|session|token|password|credential/.test(hay)) return "login"
-  if (/product|shop|store|cart|catalog|checkout|inventory|\bprice/.test(hay)) return "products"
-  if (/metric|analytic|dashboard|\bstat|\bevent|revenue|chart|report/.test(hay)) return "dashboard"
-  if (/content|headline|hero|landing|marketing|\bcta\b|subheadline|tagline/.test(hay)) return "marketing"
-  return "marketing"
-}
-
-/**
- * Find the nearest code block connected to `el` in EITHER direction. Unlike
- * getApiContext (which only walks upstream to resolve data), a website may sit
- * before the code block in the flow, so we breadth-first search the undirected
- * connection graph to find the code node driving this part of the workflow.
- */
-export function getConnectedCode(
-  el: CanvasElement,
-  elements: CanvasElement[],
-  connections: Connection[],
-): CanvasElement | null {
-  const byId = new Map(elements.map((e) => [e.id, e]))
-  const adj = new Map<string, string[]>()
-  for (const c of connections) {
-    adj.set(c.from, [...(adj.get(c.from) ?? []), c.to])
-    adj.set(c.to, [...(adj.get(c.to) ?? []), c.from])
-  }
-  const seen = new Set<string>([el.id])
-  let frontier = [el.id]
-  for (let hop = 0; hop < 24 && frontier.length; hop++) {
-    const next: string[] = []
-    for (const id of frontier) {
-      for (const nb of adj.get(id) ?? []) {
-        if (seen.has(nb)) continue
-        seen.add(nb)
-        const node = byId.get(nb)
-        if (node?.type === "code") return node
-        next.push(nb)
-      }
-    }
-    frontier = next
-  }
   return null
 }
 

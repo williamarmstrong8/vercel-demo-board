@@ -3,8 +3,8 @@ import type { CanvasElement } from "./types"
 /**
  * Selectable starter templates for the code node. Each preset fills the block's
  * file name + source. API-style presets export a route handler with a
- * `Response.json(...)` call so that downstream website/server nodes can detect
- * the method, route, and response body and visualize the whole chain.
+ * `Response.json(...)` call so that downstream server nodes can detect the
+ * method, route, and response body and visualize the whole chain.
  */
 export interface CodePreset {
   id: string

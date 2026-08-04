@@ -5,7 +5,6 @@ import { CanvasSurface } from "@/components/whiteboard/canvas-surface"
 import { Toolbar } from "@/components/whiteboard/toolbar"
 import { PropertiesPanel } from "@/components/whiteboard/properties-panel"
 import { ZoomControls } from "@/components/whiteboard/zoom-controls"
-import { ModeToggle } from "@/components/whiteboard/mode-toggle"
 import { BoardTopBar } from "@/components/whiteboard/board-top-bar"
 import {
   useWhiteboard,
@@ -219,9 +218,6 @@ export function BoardEditor({
       <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between p-3">
         <div className="pointer-events-auto flex items-center gap-2">
           <BoardTopBar boardId={boardId} />
-        </div>
-        <div className="pointer-events-auto">
-          <ModeToggle />
         </div>
       </div>
 

@@ -146,12 +146,11 @@ interface WhiteboardState {
   future: CanvasElement[][]
 
   // workflow + placement: transient (not persisted)
-  connectingFrom: string | null
-  connectPos: { x: number; y: number } | null
   pendingTemplate: { elements: CanvasElement[]; connections: Connection[] } | null
+  // id of the shape currently hovered while drawing an arrow/line, so its
+  // outline can highlight to show the endpoint will snap to it (not persisted)
+  snapTargetId: string | null
   runStates: Record<string, RunPhase>
-  // page mode: "build" shows all node handles; "prod" hides them unless connected
-  mode: "build" | "prod"
 
   // selectors
   current: () => Project
@@ -163,6 +162,7 @@ interface WhiteboardState {
   // tool + camera
   setTool: (tool: Tool) => void
   setCamera: (camera: Camera) => void
+  setSnapTarget: (id: string | null) => void
 
   // history
   beginInteraction: () => void
@@ -198,16 +198,10 @@ interface WhiteboardState {
   // workflow connections
   addConnection: (from: string, to: string) => void
   removeConnection: (id: string) => void
-  startConnect: (fromId: string) => void
-  updateConnectDrag: (pos: { x: number; y: number }) => void
-  finishConnect: (toId: string | null) => void
 
   // workflow run
   runFrom: (id: string) => void
   clearRun: () => void
-
-  // page mode
-  setMode: (mode: "build" | "prod") => void
 }
 
 function writeElements(state: WhiteboardState, elements: CanvasElement[]): Partial<WhiteboardState> {
@@ -259,11 +253,9 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
   clipboard: [],
   past: [],
   future: [],
-  connectingFrom: null,
-  connectPos: null,
   pendingTemplate: null,
   runStates: {},
-  mode: "build",
+  snapTargetId: null,
 
   current: () => {
     const s = get()
@@ -283,8 +275,7 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
       future: [],
       tool: "select",
       runStates: {},
-      connectingFrom: null,
-      connectPos: null,
+      snapTargetId: null,
     })
   },
 
@@ -293,7 +284,9 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
     persist(get())
   },
 
-  setTool: (tool) => set({ tool, pendingTemplate: null }),
+  setTool: (tool) => set({ tool, pendingTemplate: null, snapTargetId: null }),
+
+  setSnapTarget: (id) => set({ snapTargetId: id }),
 
   setCamera: (camera) => {
     set((s) => ({
@@ -522,15 +515,6 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
     persist(get())
   },
 
-  startConnect: (fromId) => set({ connectingFrom: fromId, connectPos: null }),
-  updateConnectDrag: (pos) => set({ connectPos: pos }),
-  finishConnect: (toId) => {
-    const s = get()
-    const from = s.connectingFrom
-    set({ connectingFrom: null, connectPos: null })
-    if (from && toId) s.addConnection(from, toId)
-  },
-
   runFrom: (id) => {
     const s = get()
     const conns = s.current().connections
@@ -564,8 +548,6 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
   },
 
   clearRun: () => set({ runStates: {} }),
-
-  setMode: (mode) => set({ mode, connectingFrom: null, connectPos: null }),
 }))
 
 export { uid }

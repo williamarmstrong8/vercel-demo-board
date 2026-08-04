@@ -80,7 +80,7 @@ export const PUBLIC_LIBRARY_SEED = [
     "End-to-end chat flow using the AI SDK: client useChat, streaming route, tools, and model provider.",
     [
       el("text", 40, 24, 360, 40, { text: "AI SDK Chatbot", fontSize: 26, bold: true, fill: "transparent", stroke: "transparent" }),
-      el("website", 40, 90, 220, 130, { title: "Chat UI", websiteTemplate: "dashboard", fill: "#ffffff", stroke: BLUE }),
+      el("card", 40, 90, 220, 130, { title: "Chat UI", text: "Streaming useChat interface", fill: "#ffffff", stroke: BLUE }),
       el("server", 320, 100, 200, 90, { title: "POST /api/chat", method: "POST", fill: "#ffffff", stroke: GREEN }),
       el("code", 320, 230, 220, 120, { title: "streamText()", text: "model: 'openai/gpt'", fill: "#0a0a0a", stroke: "#0a0a0a" }),
       el("card", 600, 100, 200, 110, { title: "Tools", text: "getWeather · search", fill: MUTED, stroke: INK }),
@@ -94,8 +94,8 @@ export const PUBLIC_LIBRARY_SEED = [
     "Shopping journey from catalog to checkout with cart state and payment handoff.",
     [
       el("text", 40, 24, 360, 40, { text: "Storefront Flow", fontSize: 26, bold: true, fill: "transparent", stroke: "transparent" }),
-      el("website", 40, 90, 200, 120, { title: "Catalog", websiteTemplate: "products", fill: "#ffffff", stroke: INK }),
-      el("website", 280, 90, 200, 120, { title: "Product", websiteTemplate: "marketing", fill: "#ffffff", stroke: BLUE }),
+      el("card", 40, 90, 200, 120, { title: "Catalog", text: "Product grid page", fill: "#ffffff", stroke: INK }),
+      el("card", 280, 90, 200, 120, { title: "Product", text: "Landing page", fill: "#ffffff", stroke: BLUE }),
       el("card", 520, 90, 190, 120, { title: "Cart", text: "Client state", fill: MUTED, stroke: INK }),
       el("server", 280, 260, 200, 90, { title: "POST /checkout", method: "POST", fill: "#ffffff", stroke: GREEN }),
       el("card", 520, 250, 190, 110, { title: "Stripe", text: "Payment intent", fill: "#ffffff", stroke: AMBER }),

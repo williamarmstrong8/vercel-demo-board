@@ -23,7 +23,6 @@ import type { CanvasElement, CodeThemeId } from "@/lib/whiteboard/types"
 import { CODE_THEMES } from "@/lib/whiteboard/code-themes"
 import { CODE_PRESETS } from "@/lib/whiteboard/code-presets"
 import { AGENT_STRUCTURES, EVE_ADD_CATEGORIES, EVE_CHANNELS, type EveStructureTemplate } from "@/lib/whiteboard/eve-templates"
-import { WEBSITE_TEMPLATES } from "@/components/whiteboard/website-templates"
 import { cn } from "@/lib/utils"
 
 // 3 shades per hue: dark -> mid -> light (rendered column-major, so each
@@ -241,8 +240,8 @@ export function PropertiesPanel() {
     )
   }
 
-  // Workflow nodes (code / terminal / website / server) get a dedicated menu.
-  const isNode = ["code", "terminal", "website", "server"].includes(first.type)
+  // Workflow nodes (code / terminal / server) get a dedicated menu.
+  const isNode = ["code", "terminal", "server"].includes(first.type)
   if (isNode && selected.length === 1) {
     return (
       <div className="pointer-events-auto flex max-h-full w-60 flex-col overflow-hidden rounded-xl border border-border bg-card">
@@ -289,47 +288,12 @@ export function PropertiesPanel() {
           </Section>
         )}
 
-        {first.type === "website" && (
-          <Section title="Template">
-            <div className="flex flex-col gap-1">
-              {WEBSITE_TEMPLATES.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => updateWithHistory(ids, { websiteTemplate: t.id })}
-                  className={cn(
-                    "flex flex-col items-start rounded-md border px-2.5 py-1.5 text-left transition-colors",
-                    (first.websiteTemplate ?? "marketing") === t.id
-                      ? "border-foreground bg-muted"
-                      : "border-border hover:border-foreground/40 hover:bg-muted",
-                  )}
-                >
-                  <span className="text-xs font-medium">{t.label}</span>
-                  <span className="text-[10px] text-muted-foreground">{t.description}</span>
-                </button>
-              ))}
-            </div>
-          </Section>
-        )}
-
-        {(first.type === "website" || first.type === "server") && (
+        {first.type === "server" && (
           <Section title="Smart connect">
             <Toggle
               checked={first.smartConnect !== false}
               onChange={(v) => updateWithHistory(ids, { smartConnect: v })}
               label={first.smartConnect !== false ? "Reflects upstream node" : "Custom block"}
-            />
-          </Section>
-        )}
-
-        {first.type === "website" && first.smartConnect === false && (
-          <Section title="URL">
-            <input
-              type="text"
-              value={first.url ?? ""}
-              placeholder="https://example.com"
-              onFocus={beginInteraction}
-              onChange={(e) => update(ids, { url: e.target.value })}
-              className="h-8 w-full rounded-md border border-border bg-background px-2.5 text-xs outline-none focus:border-foreground/40"
             />
           </Section>
         )}
@@ -875,10 +839,21 @@ function NumberInput({
   onChange: (v: number) => void
   onStart: () => void
 }) {
+  // While the user is actively typing (e.g. clearing the field to retype a new
+  // value) we keep their raw keystrokes locally instead of clamping on every
+  // change — clamping an intermediate "" (which parses to 0) would snap the
+  // value down to `min` before they finish typing. The clamp only applies once
+  // they commit (blur / Enter).
+  const [draft, setDraft] = useState<string | null>(null)
   const clamp = (n: number) => Math.max(min, Math.min(max, n))
   const step = (delta: number) => {
     onStart()
     onChange(clamp(Math.round(value) + delta))
+  }
+  const commit = (raw: string) => {
+    const n = Number(raw)
+    if (raw.trim() !== "" && !Number.isNaN(n)) onChange(clamp(n))
+    setDraft(null)
   }
   return (
     <div className="flex items-center gap-1">
@@ -893,11 +868,16 @@ function NumberInput({
         type="number"
         min={min}
         max={max}
-        value={Math.round(value)}
+        value={draft ?? Math.round(value)}
         onFocus={onStart}
-        onChange={(e) => {
-          const n = Number(e.target.value)
-          if (!Number.isNaN(n)) onChange(clamp(n))
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={(e) => commit(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            commit(e.currentTarget.value)
+            e.currentTarget.blur()
+          }
+          e.stopPropagation()
         }}
         className="h-6 w-12 rounded-md border border-border bg-background text-center text-xs tabular-nums outline-none focus:border-foreground/40"
       />

@@ -4,7 +4,7 @@ import { useState } from "react"
 import { X } from "lucide-react"
 import { useWhiteboard } from "@/lib/whiteboard/store"
 import { getBounds } from "@/lib/whiteboard/geometry"
-import { isNodeType, type CanvasElement } from "@/lib/whiteboard/types"
+import type { CanvasElement } from "@/lib/whiteboard/types"
 
 const SIDES = ["top", "right", "bottom", "left"] as const
 type Side = (typeof SIDES)[number]
@@ -48,21 +48,6 @@ function bestAnchors(a: CanvasElement, b: CanvasElement) {
   return best
 }
 
-/** Side of a node whose handle is closest to an arbitrary point (drag target). */
-function nearestSide(el: CanvasElement, pt: { x: number; y: number }): Side {
-  let best: Side = "right"
-  let bd = Number.POSITIVE_INFINITY
-  for (const s of SIDES) {
-    const p = sidePoint(el, s)
-    const dd = Math.hypot(pt.x - p.x, pt.y - p.y)
-    if (dd < bd) {
-      bd = dd
-      best = s
-    }
-  }
-  return best
-}
-
 /** Bezier whose control points leave/enter each endpoint perpendicular to its side. */
 function curvePath(
   x1: number,
@@ -82,20 +67,16 @@ function curvePath(
 
 /**
  * SVG layer (rendered *behind* the nodes) that draws every workflow connection
- * as a bezier curve, plus the in-progress curve while dragging a new link.
+ * as a bezier curve.
  */
 export function ConnectionCurves() {
   const elements = useWhiteboard((s) => (s.projects.find((p) => p.id === s.currentId) ?? s.projects[0]).elements)
   const connections = useWhiteboard((s) => (s.projects.find((p) => p.id === s.currentId) ?? s.projects[0]).connections)
-  const connectingFrom = useWhiteboard((s) => s.connectingFrom)
-  const connectPos = useWhiteboard((s) => s.connectPos)
   const runStates = useWhiteboard((s) => s.runStates)
   const removeConnection = useWhiteboard((s) => s.removeConnection)
   const [hovered, setHovered] = useState<string | null>(null)
 
   const byId = new Map(elements.map((e) => [e.id, e]))
-
-  const from = connectingFrom ? byId.get(connectingFrom) : undefined
 
   return (
     <svg
@@ -162,20 +143,6 @@ export function ConnectionCurves() {
         )
       })}
 
-      {from && connectPos && (() => {
-        const startSide = nearestSide(from, connectPos)
-        const sp = sidePoint(from, startSide)
-        return (
-          <path
-            d={curvePath(sp.x, sp.y, SIDE_DIR[startSide], connectPos.x, connectPos.y, { x: 0, y: 0 })}
-            fill="none"
-            stroke="#0070f3"
-            strokeWidth={2}
-            strokeDasharray="5 4"
-          />
-        )
-      })()}
-
       <defs>
         <marker id="wf-arrow-idle" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
           <path d="M 0 0 L 10 5 L 0 10 z" fill="#b0b0b0" />
@@ -185,83 +152,5 @@ export function ConnectionCurves() {
         </marker>
       </defs>
     </svg>
-  )
-}
-
-/**
- * HTML layer (rendered *above* the nodes) with four connection handles per node
- * (top / right / bottom / left). Dragging any handle starts a new connection.
- */
-export function ConnectionHandles() {
-  const elements = useWhiteboard((s) => (s.projects.find((p) => p.id === s.currentId) ?? s.projects[0]).elements)
-  const connections = useWhiteboard((s) => (s.projects.find((p) => p.id === s.currentId) ?? s.projects[0]).connections)
-  const startConnect = useWhiteboard((s) => s.startConnect)
-  const connectingFrom = useWhiteboard((s) => s.connectingFrom)
-  const mode = useWhiteboard((s) => s.mode)
-
-  // Companion code blocks (opened from a file-tree) are not part of the
-  // workflow graph, so they don't get connection handles.
-  const nodes = elements.filter((e) => isNodeType(e.type) && !e.companionOf)
-  const build = mode === "build"
-
-  // In prod mode only handles that are actually part of a connection remain
-  // visible (as static indicators). Compute the used anchor sides per node.
-  const byId = new Map(elements.map((e) => [e.id, e]))
-  const usedSides = new Set<string>()
-  if (!build) {
-    for (const c of connections) {
-      const a = byId.get(c.from)
-      const b = byId.get(c.to)
-      if (!a || !b) continue
-      const { sa, sb } = bestAnchors(a, b)
-      usedSides.add(`${a.id}:${sa}`)
-      usedSides.add(`${b.id}:${sb}`)
-    }
-  }
-
-  return (
-    <>
-      {nodes.map((el) => {
-        const isSource = connectingFrom === el.id
-        return (
-          <div key={el.id}>
-            {SIDES.map((side) => {
-              // prod mode: hide unconnected handles
-              if (!build && !usedSides.has(`${el.id}:${side}`)) return null
-              const p = sidePoint(el, side)
-              return (
-                <div
-                  key={side}
-                  data-connect-handle={build ? el.id : undefined}
-                  data-connect-side={side}
-                  onPointerDown={
-                    build
-                      ? (e) => {
-                          e.stopPropagation()
-                          startConnect(el.id)
-                        }
-                      : undefined
-                  }
-                  title={build ? "Drag to connect" : undefined}
-                  style={{
-                    position: "absolute",
-                    left: p.x - (build ? 6 : 4),
-                    top: p.y - (build ? 6 : 4),
-                    width: build ? 12 : 8,
-                    height: build ? 12 : 8,
-                    borderRadius: 9999,
-                    background: isSource ? "#0070f3" : build ? "#fff" : "#0070f3",
-                    border: build ? "2px solid #0070f3" : "none",
-                    cursor: build ? "crosshair" : "default",
-                    pointerEvents: build ? "auto" : "none",
-                    boxShadow: "none",
-                  }}
-                />
-              )
-            })}
-          </div>
-        )
-      })}
-    </>
   )
 }

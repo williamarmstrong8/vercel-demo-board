@@ -59,8 +59,11 @@ export function createElement(
         type: "card",
         width: 260,
         height: 150,
-        title: "Card title",
-        text: "Add a description...",
+        // left unset (not "Card title" / "Add a description...") so those
+        // strings render as placeholders (see CardView/ElementEditor) instead
+        // of real content that gets typed into rather than replaced
+        title: "",
+        text: "",
         stroke: "#eaeaea",
         fill: "#ffffff",
         strokeWidth: 1,
@@ -94,20 +97,6 @@ export function createElement(
         strokeWidth: 1,
         rounded: true,
         codeTheme: "dark",
-        showRun: false,
-      }
-    case "website":
-      return {
-        ...base,
-        type: "website",
-        width: 380,
-        height: 260,
-        url: "https://v0.app",
-        title: "v0",
-        fill: "#ffffff",
-        stroke: "#eaeaea",
-        strokeWidth: 1,
-        rounded: true,
         showRun: false,
       }
     case "server":

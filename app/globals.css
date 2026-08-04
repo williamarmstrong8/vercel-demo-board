@@ -198,16 +198,6 @@
   border: 2px solid var(--card);
 }
 
-/* ---------- Whiteboard: website node loading bar ---------- */
-@keyframes wb-load {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(350%);
-  }
-}
-
 /* ---------- Whiteboard: server terminal log lines ---------- */
 @keyframes wb-server-line {
   0% {

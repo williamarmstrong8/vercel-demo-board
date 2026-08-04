@@ -68,17 +68,29 @@ You are a friendly weather assistant.
 - If the user doesn't give a city, ask which one they mean.
 - Keep replies to two short sentences.`
 
-const TOOL_GET_WEATHER = `// This is a "tool" the assistant can use to look up the weather for any city you name.
-// It needs a free OpenWeather key saved as OPENWEATHER_API_KEY (see the .env.example file).
+const TOOL_GET_WEATHER = `// This is a "tool" the assistant can use to look up the weather for any place you name.
+// Live data from wttr.in — free, no API key and no signup. The URL path is the
+// place: wttr.in/tokyo, wttr.in/94103, wttr.in/SFO. "format=j1" asks for JSON.
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 export default defineTool({
   description: "Get the current weather for a city.",
   inputSchema: z.object({ city: z.string() }),
   async execute({ city }) {
-    const url = \`https://api.openweathermap.org/data/2.5/weather?q=\${city}&units=metric&appid=\${process.env.OPENWEATHER_API_KEY}\`;
+    const url = \`https://wttr.in/\${encodeURIComponent(city)}?format=j1\`;
     const res = await fetch(url);
-    return await res.json();
+    const data = await res.json();
+    const now = data.current_condition[0];
+    return {
+      city,
+      region: data.nearest_area[0].region[0].value,
+      condition: now.weatherDesc[0].value.trim(),
+      temperatureC: Number(now.temp_C),
+      temperatureF: Number(now.temp_F),
+      humidity: Number(now.humidity),
+      windKph: Number(now.windspeedKmph),
+      source: "wttr.in",
+    };
   },
 });`
 
@@ -408,7 +420,7 @@ export const AGENT_FILE_TEMPLATES: Record<string, EveFileTemplate[]> = {
     { id: "instructions-weather", label: "Weather", description: "Weather assistant prompt", code: INSTRUCTIONS_WEATHER },
   ],
   "get_weather.ts": [
-    { id: "tool-weather", label: "Weather", description: "Calls the OpenWeather API", code: TOOL_GET_WEATHER },
+    { id: "tool-weather", label: "Weather", description: "Calls wttr.in — free, no API key", code: TOOL_GET_WEATHER },
   ],
   "SKILL.md": [
     { id: "skill-research", label: "Research", description: "A model-loadable procedure", code: SKILL_RESEARCH },
@@ -455,7 +467,7 @@ export const AGENT_STRUCTURES: EveStructureTemplate[] = [
   {
     id: "weather",
     label: "Weather assistant",
-    description: "A tool that calls the OpenWeather API",
+    description: "A tool that calls wttr.in — free, no API key",
     agentName: "weather-assistant",
     files: [
       { name: "agent.ts", codeTheme: "dark", code: AGENT_WEATHER },
