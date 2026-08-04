@@ -9,9 +9,9 @@ export interface BoardData {
   camera: Camera
 }
 
-// A whiteboard board. `ownerId` defaults to "anonymous" for now; once identity
-// (Vercel Passport / Okta) is wired in, it becomes the Passport `external_sub`
-// and every query gets scoped by it — no schema change required.
+// A whiteboard board. There's no auth in this app — every board is a shared,
+// sign-in-free resource — so `ownerId` is unused by application code and just
+// keeps its "anonymous" default for every row.
 export const boards = pgTable("boards", {
   id: text("id").primaryKey(),
   ownerId: text("owner_id").notNull().default("anonymous"),

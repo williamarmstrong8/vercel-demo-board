@@ -2,8 +2,7 @@
 
 import { create } from "zustand"
 import type { CanvasElement, Camera, Project, Tool, Connection, RunPhase } from "./types"
-
-const STORAGE_KEY = "vercel-canvas:v1"
+import { putImage, getImage, deleteImages } from "./image-store"
 
 function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4)
@@ -29,33 +28,20 @@ function emptyProject(name = "Untitled board"): Project {
   }
 }
 
-interface PersistShape {
-  projects: Project[]
-  currentId: string
-}
-
-function load(): PersistShape | null {
-  if (typeof window === "undefined") return null
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as PersistShape
-    if (!parsed.projects?.length) return null
-    // migrate: ensure every project has a connections array
-    parsed.projects = parsed.projects.map((p) => ({ ...p, connections: p.connections ?? [] }))
-    return parsed
-  } catch {
-    return null
-  }
-}
-
 // --- Persistence adapter --------------------------------------------------
-// Guest mode: the whole multi-project store is mirrored to localStorage.
+// Every board lives in Postgres (see app/actions/boards.ts) — that's the
+// source of truth. localStorage here only holds a lightweight per-board
+// recovery draft in case a network save is in flight or fails; it's never
+// read unless the cloud fetch fails or the draft is newer than the last
+// confirmed save (see board-editor.tsx's load effect).
 //
-// Cloud editing mode (/board/[id]): every change is first mirrored to a
-// lightweight per-board localStorage recovery draft. Substantive edits then
-// notify the editor, which debounces and serializes cloud autosaves. Camera-only
-// movement stays local so panning and zooming do not create database writes.
+// The actual debounce that turns edits into a network write lives entirely in
+// board-editor.tsx (one 500ms timer). This module fires `cloudChangeListener`
+// immediately on every substantive change — no debounce here — so there is
+// exactly one debounce in the whole pipeline instead of two stacking on top
+// of each other. Camera-only pan/zoom is `silent`: it still refreshes the
+// local draft (so a mid-pan crash doesn't lose the camera position) but never
+// triggers a network write.
 let cloudBoardId: string | null = null
 let cloudChangeListener: ((project: Project) => void) | null = null
 
@@ -70,18 +56,38 @@ export function enableCloudDraft(boardId: string, onChange: (project: Project) =
 export function disableCloudDraft() {
   cloudBoardId = null
   cloudChangeListener = null
-  if (cloudChangeTimer) clearTimeout(cloudChangeTimer)
-  cloudChangeTimer = null
+}
+
+// Image elements embed a base64 data URL, which can blow past localStorage's
+// ~5MB quota. The draft keeps only the element id; the actual bytes live in
+// IndexedDB (see image-store.ts), keyed by that same id.
+function stripImageBlobs(elements: CanvasElement[]): CanvasElement[] {
+  return elements.map((el) => {
+    if (el.type !== "image" || !el.src?.startsWith("data:")) return el
+    void putImage(el.id, el.src)
+    return { ...el, src: undefined }
+  })
+}
+
+async function rehydrateImageBlobs(elements: CanvasElement[]): Promise<CanvasElement[]> {
+  return Promise.all(
+    elements.map(async (el) => {
+      if (el.type !== "image" || el.src) return el
+      const src = await getImage(el.id)
+      return src ? { ...el, src } : el
+    }),
+  )
 }
 
 // The locally-saved working copy for a board, if the user has unsaved edits.
-export function readBoardDraft(id: string): Project | null {
+export async function readBoardDraft(id: string): Promise<Project | null> {
   if (typeof window === "undefined") return null
   try {
     const raw = window.localStorage.getItem(draftKey(id))
     if (!raw) return null
     const p = JSON.parse(raw) as Project
-    return { ...p, connections: p.connections ?? [] }
+    const elements = await rehydrateImageBlobs(p.elements ?? [])
+    return { ...p, elements, connections: p.connections ?? [] }
   } catch {
     return null
   }
@@ -91,6 +97,12 @@ export function readBoardDraft(id: string): Project | null {
 export function clearBoardDraft(id: string) {
   if (typeof window === "undefined") return
   try {
+    const raw = window.localStorage.getItem(draftKey(id))
+    if (raw) {
+      const p = JSON.parse(raw) as Project
+      const imageIds = (p.elements ?? []).filter((e) => e.type === "image").map((e) => e.id)
+      void deleteImages(imageIds)
+    }
     window.localStorage.removeItem(draftKey(id))
   } catch {
     // ignore
@@ -98,46 +110,28 @@ export function clearBoardDraft(id: string) {
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
-let cloudChangeTimer: ReturnType<typeof setTimeout> | null = null
-// `silent` keeps camera pan/zoom in the local recovery draft without scheduling
-// a cloud write.
+// `silent` keeps camera pan/zoom in the local recovery draft without
+// notifying the editor's autosave queue.
 function persist(state: WhiteboardState, silent = false) {
-  if (typeof window === "undefined") return
+  if (typeof window === "undefined" || !cloudBoardId) return
+  const id = cloudBoardId
+
   if (saveTimer) clearTimeout(saveTimer)
-
-  // Cloud editing: always refresh the local recovery draft. Substantive edits
-  // also emit the newest board snapshot to the editor's cloud autosave queue.
-  if (cloudBoardId) {
-    const id = cloudBoardId
-    saveTimer = setTimeout(() => {
-      const board = state.projects.find((p) => p.id === id) ?? state.projects[0]
-      if (!board) return
-      try {
-        window.localStorage.setItem(draftKey(id), JSON.stringify(board))
-      } catch {
-        // ignore quota errors
-      }
-    }, 300)
-
-    if (!silent) {
-      if (cloudChangeTimer) clearTimeout(cloudChangeTimer)
-      cloudChangeTimer = setTimeout(() => {
-        const board = state.projects.find((p) => p.id === id) ?? state.projects[0]
-        if (board && cloudBoardId === id) cloudChangeListener?.(board)
-      }, 300)
-    }
-    return
-  }
-
-  // Guest mode: mirror the whole store.
   saveTimer = setTimeout(() => {
+    const board = state.projects.find((p) => p.id === id) ?? state.projects[0]
+    if (!board) return
     try {
-      const shape: PersistShape = { projects: state.projects, currentId: state.currentId }
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(shape))
+      const draft = { ...board, elements: stripImageBlobs(board.elements) }
+      window.localStorage.setItem(draftKey(id), JSON.stringify(draft))
     } catch {
       // ignore quota errors
     }
-  }, 400)
+  }, 300)
+
+  if (!silent) {
+    const board = state.projects.find((p) => p.id === id) ?? state.projects[0]
+    if (board) cloudChangeListener?.(board)
+  }
 }
 
 interface WhiteboardState {
@@ -150,7 +144,6 @@ interface WhiteboardState {
   // per-project history (session only)
   past: CanvasElement[][]
   future: CanvasElement[][]
-  hydrated: boolean
 
   // workflow + placement: transient (not persisted)
   connectingFrom: string | null
@@ -164,15 +157,8 @@ interface WhiteboardState {
   current: () => Project
 
   // lifecycle
-  hydrate: () => void
   loadBoard: (project: Project) => void
-
-  // projects
-  newProject: (name?: string) => void
-  newProjectFromTemplate: (name: string, elements: CanvasElement[], connections: Connection[]) => void
-  switchProject: (id: string) => void
   renameProject: (id: string, name: string) => void
-  deleteProject: (id: string) => void
 
   // tool + camera
   setTool: (tool: Tool) => void
@@ -273,7 +259,6 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
   clipboard: [],
   past: [],
   future: [],
-  hydrated: false,
   connectingFrom: null,
   connectPos: null,
   pendingTemplate: null,
@@ -285,26 +270,9 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
     return s.projects.find((p) => p.id === s.currentId) ?? s.projects[0]
   },
 
-  hydrate: () => {
-    if (get().hydrated) return
-    const loaded = load()
-    if (loaded) {
-      set({
-        projects: loaded.projects,
-        currentId: loaded.currentId && loaded.projects.some((p) => p.id === loaded.currentId)
-          ? loaded.currentId
-          : loaded.projects[0].id,
-        hydrated: true,
-      })
-    } else {
-      const p = get().projects[0]
-      set({ currentId: p.id, hydrated: true })
-      persist(get())
-    }
-  },
-
-  // Load a single board fetched from the cloud, replacing any in-memory state.
-  // Used by the /board/[id] editor; does not touch localStorage.
+  // Load a single board fetched from Postgres (or a recovered local draft),
+  // replacing any in-memory state. Used by the /board/[id] editor; does not
+  // itself touch localStorage.
   loadBoard: (project) => {
     set({
       projects: [{ ...project, connections: project.connections ?? [] }],
@@ -314,58 +282,14 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
       past: [],
       future: [],
       tool: "select",
-      hydrated: true,
       runStates: {},
       connectingFrom: null,
       connectPos: null,
     })
   },
 
-  newProject: (name) => {
-    const p = emptyProject(name || `Board ${get().projects.length + 1}`)
-    set((s) => ({
-      projects: [...s.projects, p],
-      currentId: p.id,
-      selectedIds: [],
-      editingId: null,
-      past: [],
-      future: [],
-      tool: "select",
-    }))
-    persist(get())
-  },
-
-  newProjectFromTemplate: (name, elements, connections) => {
-    const p: Project = { ...emptyProject(name), elements, connections }
-    set((s) => ({
-      projects: [...s.projects, p],
-      currentId: p.id,
-      selectedIds: [],
-      editingId: null,
-      past: [],
-      future: [],
-      tool: "select",
-    }))
-    persist(get())
-  },
-
-  switchProject: (id) => {
-    set({ currentId: id, selectedIds: [], editingId: null, past: [], future: [], tool: "select" })
-    persist(get())
-  },
-
   renameProject: (id, name) => {
     set((s) => ({ projects: s.projects.map((p) => (p.id === id ? { ...p, name } : p)) }))
-    persist(get())
-  },
-
-  deleteProject: (id) => {
-    set((s) => {
-      let projects = s.projects.filter((p) => p.id !== id)
-      if (projects.length === 0) projects = [emptyProject()]
-      const currentId = s.currentId === id ? projects[0].id : s.currentId
-      return { projects, currentId, selectedIds: [], editingId: null, past: [], future: [] }
-    })
     persist(get())
   },
 

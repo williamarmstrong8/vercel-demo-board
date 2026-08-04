@@ -26,21 +26,24 @@ import { AGENT_STRUCTURES, EVE_ADD_CATEGORIES, EVE_CHANNELS, type EveStructureTe
 import { WEBSITE_TEMPLATES } from "@/components/whiteboard/website-templates"
 import { cn } from "@/lib/utils"
 
-// 3 shades per hue: light -> mid -> dark
+// 3 shades per hue: dark -> mid -> light (rendered column-major, so each
+// column reads dark at the top down to light at the bottom)
 const STROKE_COLORS = [
-  ["#a3a3a3", "#525252", "#171717"], // neutral
-  ["#66b2ff", "#0070f3", "#0049b0"], // blue
-  ["#f7a4a4", "#e5484d", "#b42318"], // red
-  ["#6ee7b7", "#17c964", "#0a7d3f"], // green
-  ["#fcd34d", "#f5a623", "#c2610c"], // amber
+  ["#171717", "#525252", "#a3a3a3"], // neutral
+  ["#0049b0", "#0070f3", "#66b2ff"], // blue
+  ["#b42318", "#e5484d", "#f7a4a4"], // red
+  ["#0a7d3f", "#17c964", "#6ee7b7"], // green
+  ["#c2610c", "#f5a623", "#fcd34d"], // amber
+  ["#4c1d95", "#8b5cf6", "#c4b5fd"], // purple
 ]
 
 const FILL_COLORS = [
-  ["#f4f4f5", "#d4d4d8", "#a1a1aa"], // neutral
-  ["#e6f0ff", "#bcdcff", "#7cb8ff"], // blue
-  ["#ffe5e5", "#ffc7c7", "#ff9a9a"], // red
-  ["#dcfce7", "#bbf7d0", "#86efac"], // green
-  ["#fef3c7", "#fde68a", "#fcd34d"], // amber
+  ["#a1a1aa", "#d4d4d8", "#f4f4f5"], // neutral
+  ["#7cb8ff", "#bcdcff", "#e6f0ff"], // blue
+  ["#ff9a9a", "#ffc7c7", "#ffe5e5"], // red
+  ["#86efac", "#bbf7d0", "#dcfce7"], // green
+  ["#fcd34d", "#fde68a", "#fef3c7"], // amber
+  ["#c4b5fd", "#ddd6fe", "#ede9fe"], // purple
 ]
 
 const NO_STROKE = "transparent"
@@ -402,6 +405,8 @@ export function PropertiesPanel() {
   const currentStroke = common("stroke") as string | undefined
   const currentFill = common("fill") as string | undefined
   const fontSize = (common("fontSize") as number) ?? 24
+  const strokeWidthVal = (common("strokeWidth") as number) ?? 2
+  const opacityVal = (common("opacity") as number) ?? 1
 
   return (
     <div className="pointer-events-auto flex max-h-full w-60 flex-col overflow-hidden rounded-xl border border-border bg-card">
@@ -420,45 +425,55 @@ export function PropertiesPanel() {
       </div>
 
       <div className="flex-1 overflow-y-auto overscroll-contain">
-      {hasStroke && (
-        <Section title={strokeLabel}>
-          <div className="flex items-start gap-2">
-            {/* no-stroke option (only meaningful for shapes with a width) */}
-            {hasStrokeWidth && (
-              <NoStrokeSwatch active={currentStroke === NO_STROKE} onClick={() => updateWithHistory(ids, { stroke: NO_STROKE })} />
-            )}
-            <div className="grid grid-cols-5 gap-1.5">
-              {STROKE_COLORS.map((shades) =>
-                shades.map((c) => (
-                  <Swatch key={c} color={c} active={currentStroke === c} onClick={() => updateWithHistory(ids, { stroke: c })} />
-                )),
+      {hasStroke && (() => {
+        const strokeColorInput = (
+          <ColorInput
+            value={currentStroke && currentStroke.startsWith("#") ? currentStroke : "#171717"}
+            onChange={(v) => update(ids, { stroke: v })}
+            onStart={beginInteraction}
+          />
+        )
+        return (
+          <Section title={strokeLabel}>
+            <div className="flex items-start gap-2">
+              {/* no-stroke option (only meaningful for shapes with a width) */}
+              {hasStrokeWidth && (
+                <div className="flex flex-col gap-1.5">
+                  <NoStrokeSwatch active={currentStroke === NO_STROKE} onClick={() => updateWithHistory(ids, { stroke: NO_STROKE })} />
+                  {strokeColorInput}
+                </div>
               )}
+              <div className="grid grid-cols-6 grid-flow-col grid-rows-3 gap-1.5">
+                {STROKE_COLORS.map((shades) =>
+                  shades.map((c) => (
+                    <Swatch key={c} color={c} active={currentStroke === c} onClick={() => updateWithHistory(ids, { stroke: c })} />
+                  )),
+                )}
+              </div>
+              {!hasStrokeWidth && strokeColorInput}
             </div>
-            <ColorInput
-              value={currentStroke && currentStroke.startsWith("#") ? currentStroke : "#171717"}
-              onChange={(v) => update(ids, { stroke: v })}
-              onStart={beginInteraction}
-            />
-          </div>
-        </Section>
-      )}
+          </Section>
+        )
+      })()}
 
       {hasFill && (
         <Section title="Fill">
           <div className="flex items-start gap-2">
-            <NoStrokeSwatch active={currentFill === "transparent"} onClick={() => updateWithHistory(ids, { fill: "transparent" })} />
-            <div className="grid grid-cols-5 gap-1.5">
+            <div className="flex flex-col gap-1.5">
+              <NoStrokeSwatch active={currentFill === "transparent"} onClick={() => updateWithHistory(ids, { fill: "transparent" })} />
+              <ColorInput
+                value={currentFill && currentFill.startsWith("#") ? currentFill : "#ffffff"}
+                onChange={(v) => update(ids, { fill: v })}
+                onStart={beginInteraction}
+              />
+            </div>
+            <div className="grid grid-cols-6 grid-flow-col grid-rows-3 gap-1.5">
               {FILL_COLORS.map((shades) =>
                 shades.map((c) => (
                   <Swatch key={c} color={c} active={currentFill === c} onClick={() => updateWithHistory(ids, { fill: c })} />
                 )),
               )}
             </div>
-            <ColorInput
-              value={currentFill && currentFill.startsWith("#") ? currentFill : "#ffffff"}
-              onChange={(v) => update(ids, { fill: v })}
-              onStart={beginInteraction}
-            />
           </div>
         </Section>
       )}
@@ -466,16 +481,30 @@ export function PropertiesPanel() {
       <Section title="Style">
         {hasStrokeWidth && (
           <Row label="Stroke width">
-            <input
-              type="range"
-              min={0}
-              max={12}
-              step={1}
-              defaultValue={(common("strokeWidth") as number) ?? 2}
-              onPointerDown={beginInteraction}
-              onChange={(e) => update(ids, { strokeWidth: Number(e.target.value) })}
-              className="wb-range"
-            />
+            <div className="flex flex-1 items-center gap-2">
+              <input
+                type="range"
+                min={0}
+                max={12}
+                step={1}
+                value={strokeWidthVal}
+                onPointerDown={beginInteraction}
+                onChange={(e) => update(ids, { strokeWidth: Number(e.target.value) })}
+                className="wb-range"
+              />
+              <input
+                type="number"
+                min={0}
+                max={12}
+                value={Math.round(strokeWidthVal)}
+                onFocus={beginInteraction}
+                onChange={(e) => {
+                  const n = Number(e.target.value)
+                  if (!Number.isNaN(n)) update(ids, { strokeWidth: Math.max(0, Math.min(12, Math.round(n))) })
+                }}
+                className="h-6 w-9 shrink-0 rounded-md border border-border bg-background text-center text-[11px] tabular-nums outline-none focus:border-foreground/40"
+              />
+            </div>
           </Row>
         )}
         {hasText && (
@@ -490,16 +519,30 @@ export function PropertiesPanel() {
           </Row>
         )}
         <Row label="Opacity">
-          <input
-            type="range"
-            min={0.1}
-            max={1}
-            step={0.05}
-            defaultValue={(common("opacity") as number) ?? 1}
-            onPointerDown={beginInteraction}
-            onChange={(e) => update(ids, { opacity: Number(e.target.value) })}
-            className="wb-range"
-          />
+          <div className="flex flex-1 items-center gap-2">
+            <input
+              type="range"
+              min={0.1}
+              max={1}
+              step={0.05}
+              value={opacityVal}
+              onPointerDown={beginInteraction}
+              onChange={(e) => update(ids, { opacity: Number(e.target.value) })}
+              className="wb-range"
+            />
+            <input
+              type="number"
+              min={10}
+              max={100}
+              value={Math.round(opacityVal * 100)}
+              onFocus={beginInteraction}
+              onChange={(e) => {
+                const n = Number(e.target.value)
+                if (!Number.isNaN(n)) update(ids, { opacity: Math.max(0.1, Math.min(1, Math.round(n) / 100)) })
+              }}
+              className="h-6 w-9 shrink-0 rounded-md border border-border bg-background text-center text-[11px] tabular-nums outline-none focus:border-foreground/40"
+            />
+          </div>
         </Row>
       </Section>
 

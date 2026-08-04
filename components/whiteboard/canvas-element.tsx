@@ -833,49 +833,72 @@ function renderContent(el: CanvasElement, b: { width: number; height: number }, 
   }
 }
 
+// A diamond's edges run at a shallow angle rather than square-on, so a plain
+// axis-aligned vertex offset undershoots the perpendicular stroke width the
+// eye actually sees; scaling the offset by sqrt(2) corrects for that (exact
+// for a square diamond, a close approximation otherwise).
+function diamondPoints(w: number, h: number, outset: number) {
+  const cx = w / 2
+  const cy = h / 2
+  const hw = w / 2 + outset
+  const hh = h / 2 + outset
+  return `${cx},${cy - hh} ${cx + hw},${cy} ${cx},${cy + hh} ${cx - hw},${cy}`
+}
+
 function ShapeSvg({ el, b }: { el: CanvasElement; b: { width: number; height: number } }) {
   const noStroke = el.stroke === "transparent" || el.strokeWidth === 0
   const strokeVal = noStroke ? "none" : el.stroke
   const sw = noStroke ? 0 : el.strokeWidth
-  const pad = sw
   const w = Math.max(1, b.width)
   const h = Math.max(1, b.height)
   const fill = el.fill === "transparent" ? "none" : el.fill
   const rx = el.rounded ? Math.min(16, Math.min(w, h) * 0.12) : 0
+  // Stroke is drawn entirely outside the shape (Figma-style "outside" align):
+  // a separate stroke-only path is outset by half the stroke width so its
+  // own centered stroke band lands fully beyond the fill's edge, and the
+  // fill path itself is painted on top at the untouched full size.
+  const off = sw / 2
   return (
     <svg width="100%" height="100%" viewBox={`0 0 ${w} ${h}`} style={{ overflow: "visible", display: "block" }}>
       {el.type === "rectangle" && (
-        <rect
-          x={pad / 2}
-          y={pad / 2}
-          width={Math.max(1, w - pad)}
-          height={Math.max(1, h - pad)}
-          rx={rx}
-          ry={rx}
-          fill={fill}
-          stroke={strokeVal}
-          strokeWidth={sw}
-        />
+        <>
+          {sw > 0 && (
+            <rect
+              x={-off}
+              y={-off}
+              width={w + sw}
+              height={h + sw}
+              rx={rx ? rx + off : 0}
+              ry={rx ? rx + off : 0}
+              fill="none"
+              stroke={strokeVal}
+              strokeWidth={sw}
+            />
+          )}
+          <rect x={0} y={0} width={w} height={h} rx={rx} ry={rx} fill={fill} stroke="none" />
+        </>
       )}
       {el.type === "ellipse" && (
-        <ellipse
-          cx={w / 2}
-          cy={h / 2}
-          rx={Math.max(1, (w - pad) / 2)}
-          ry={Math.max(1, (h - pad) / 2)}
-          fill={fill}
-          stroke={strokeVal}
-          strokeWidth={sw}
-        />
+        <>
+          {sw > 0 && (
+            <ellipse cx={w / 2} cy={h / 2} rx={w / 2 + off} ry={h / 2 + off} fill="none" stroke={strokeVal} strokeWidth={sw} />
+          )}
+          <ellipse cx={w / 2} cy={h / 2} rx={w / 2} ry={h / 2} fill={fill} stroke="none" />
+        </>
       )}
       {el.type === "diamond" && (
-        <polygon
-          points={`${w / 2},${pad / 2} ${w - pad / 2},${h / 2} ${w / 2},${h - pad / 2} ${pad / 2},${h / 2}`}
-          fill={fill}
-          stroke={strokeVal}
-          strokeWidth={sw}
-          strokeLinejoin="round"
-        />
+        <>
+          {sw > 0 && (
+            <polygon
+              points={diamondPoints(w, h, off * Math.SQRT2)}
+              fill="none"
+              stroke={strokeVal}
+              strokeWidth={sw}
+              strokeLinejoin="round"
+            />
+          )}
+          <polygon points={diamondPoints(w, h, 0)} fill={fill} stroke="none" />
+        </>
       )}
     </svg>
   )
@@ -959,7 +982,10 @@ function CardView({ el }: { el: CanvasElement }) {
         height: "100%",
         borderRadius: el.rounded ? 12 : 2,
         background: el.fill === "transparent" ? "#ffffff" : el.fill,
-        border: noStroke ? "none" : `${el.strokeWidth}px solid ${el.stroke}`,
+        // outline (not border) so the stroke draws outside the fill's box
+        // instead of shrinking it — matches ShapeSvg's outside-stroke.
+        outline: noStroke ? "none" : `${el.strokeWidth}px solid ${el.stroke}`,
+        outlineOffset: 0,
         boxShadow: "none",
         overflow: "hidden",
         display: "flex",

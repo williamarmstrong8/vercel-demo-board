@@ -1,4 +1,4 @@
-import { listMyBoards } from "@/app/actions/boards"
+import { listBoards } from "@/app/actions/boards"
 import { BoardCard } from "@/components/home/board-card"
 import { NewBoardButton } from "@/components/home/new-board-button"
 
@@ -11,7 +11,7 @@ function VercelMark({ className }: { className?: string }) {
 }
 
 export default async function HomePage() {
-  const myBoards = await listMyBoards()
+  const boards = await listBoards()
 
   return (
     <main className="light min-h-dvh bg-background text-foreground">
@@ -32,25 +32,25 @@ export default async function HomePage() {
             Your infinite whiteboards
           </h1>
           <p className="mt-2 max-w-xl text-pretty leading-relaxed text-muted-foreground">
-            Sketch architectures, flows, and demos on an infinite canvas. Boards are saved to your
-            account and sync across devices.
+            Sketch architectures, flows, and demos on an infinite canvas. Every board is shared
+            and open to anyone — no sign-in required.
           </p>
         </section>
 
-        {/* My boards */}
+        {/* Boards */}
         <section className="mb-16">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold tracking-tight">
-              Your boards
+              All boards
               <span className="ml-2 text-sm font-normal text-muted-foreground">
-                {myBoards.length}
+                {boards.length}
               </span>
             </h2>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             <NewBoardButton variant="tile" />
-            {myBoards.map((board) => (
+            {boards.map((board) => (
               <BoardCard key={board.id} board={board} />
             ))}
           </div>

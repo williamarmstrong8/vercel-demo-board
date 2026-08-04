@@ -19,3 +19,6 @@ node_modules
 .eve/
 .vercel
 .env*
+
+# Claude Code local settings (machine-specific)
+.claude/settings.local.json

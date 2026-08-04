@@ -32,11 +32,11 @@ export function createElement(
   switch (tool) {
     // Shapes: filled by default, no stroke
     case "rectangle":
-      return { ...base, type: "rectangle", fill: DEFAULT_SHAPE_FILL, stroke: DEFAULT_STROKE, strokeWidth: 0 }
+      return { ...base, type: "rectangle", fill: DEFAULT_SHAPE_FILL, stroke: "transparent", strokeWidth: 0 }
     case "ellipse":
-      return { ...base, type: "ellipse", fill: DEFAULT_SHAPE_FILL, stroke: DEFAULT_STROKE, strokeWidth: 0 }
+      return { ...base, type: "ellipse", fill: DEFAULT_SHAPE_FILL, stroke: "transparent", strokeWidth: 0 }
     case "diamond":
-      return { ...base, type: "diamond", fill: DEFAULT_SHAPE_FILL, stroke: DEFAULT_STROKE, strokeWidth: 0 }
+      return { ...base, type: "diamond", fill: DEFAULT_SHAPE_FILL, stroke: "transparent", strokeWidth: 0 }
     // Arrows: thicker default stroke
     case "arrow":
       return { ...base, type: "arrow", fill: "transparent", stroke: DEFAULT_STROKE, strokeWidth: 4 }
