@@ -1,11 +1,12 @@
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose"
 import { cookies } from "next/headers"
+import { SESSION_COOKIE } from "@/lib/session"
 
-export const SESSION_COOKIE = "vercel_id_token"
+export { SESSION_COOKIE }
 
 const jwks = createRemoteJWKSet(new URL("https://vercel.com/.well-known/jwks"))
 
-type VercelIdentity = {
+export type VercelIdentity = {
   id: string
   name: string | null
   email: string | null
@@ -73,4 +74,21 @@ export async function getCurrentUser(): Promise<VercelIdentity | null> {
   } catch {
     return null
   }
+}
+
+// Thrown when an unauthenticated caller reaches something that writes. Callers
+// at the HTTP edge translate this into a 401; in a Server Action it surfaces as
+// a rejected promise, which the UI already guards against by hiding the
+// controls that would produce one.
+export class NotAuthenticatedError extends Error {
+  constructor() {
+    super("You must be signed in to do that.")
+    this.name = "NotAuthenticatedError"
+  }
+}
+
+export async function requireUser(): Promise<VercelIdentity> {
+  const user = await getCurrentUser()
+  if (!user) throw new NotAuthenticatedError()
+  return user
 }

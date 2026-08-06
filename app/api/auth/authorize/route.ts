@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto"
 import { NextResponse } from "next/server"
+import { RETURN_TO_COOKIE, safeReturnTo } from "@/lib/session"
 
 const OAUTH_COOKIE_OPTIONS = {
   httpOnly: true,
@@ -27,8 +28,12 @@ export async function GET(request: Request) {
   const clientId = process.env.NEXT_PUBLIC_VERCEL_APP_CLIENT_ID
   if (!clientId) {
     console.error("Vercel OAuth authorize aborted: NEXT_PUBLIC_VERCEL_APP_CLIENT_ID is not set")
-    return NextResponse.redirect(new URL("/?auth_error=not_configured", request.url))
+    return NextResponse.redirect(new URL("/signin?auth_error=not_configured", request.url))
   }
+
+  // Vercel won't hand an arbitrary path back to us, so where the user was
+  // headed rides in a cookie of our own alongside the PKCE handshake values.
+  const returnTo = safeReturnTo(new URL(request.url).searchParams.get("next"))
 
   const state = randomValue()
   const nonce = randomValue()
@@ -60,5 +65,6 @@ export async function GET(request: Request) {
   response.cookies.set("vercel_oauth_state", state, OAUTH_COOKIE_OPTIONS)
   response.cookies.set("vercel_oauth_nonce", nonce, OAUTH_COOKIE_OPTIONS)
   response.cookies.set("vercel_oauth_verifier", verifier, OAUTH_COOKIE_OPTIONS)
+  if (returnTo) response.cookies.set(RETURN_TO_COOKIE, returnTo, OAUTH_COOKIE_OPTIONS)
   return response
 }

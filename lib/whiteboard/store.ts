@@ -144,6 +144,13 @@ interface WhiteboardState {
   past: CanvasElement[][]
   future: CanvasElement[][]
 
+  // Set when the viewer may look but not touch — a public board belonging to
+  // someone else. Every mutating action below short-circuits on it, so the one
+  // thing the editor has to get right is setting the flag; no individual
+  // pointer handler in canvas-surface.tsx needs to know about permissions.
+  // This is a UI guard only: the server re-checks ownership on every write.
+  readOnly: boolean
+
   // placement: transient (not persisted)
   pendingTemplate: { elements: CanvasElement[] } | null
   // id of the shape currently hovered while drawing an arrow/line, so its
@@ -162,6 +169,7 @@ interface WhiteboardState {
   setTool: (tool: Tool) => void
   setCamera: (camera: Camera) => void
   setSnapTarget: (id: string | null) => void
+  setReadOnly: (readOnly: boolean) => void
 
   // history
   beginInteraction: () => void
@@ -240,6 +248,7 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
   pendingTemplate: null,
   runStates: {},
   snapTargetId: null,
+  readOnly: false,
 
   current: () => {
     const s = get()
@@ -264,6 +273,7 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
   },
 
   renameProject: (id, name) => {
+    if (get().readOnly) return
     set((s) => ({ projects: s.projects.map((p) => (p.id === id ? { ...p, name } : p)) }))
     persist(get())
   },
@@ -271,6 +281,10 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
   setTool: (tool) => set({ tool, pendingTemplate: null, snapTargetId: null }),
 
   setSnapTarget: (id) => set({ snapTargetId: id }),
+
+  // Panning, zooming and selecting stay available in read-only mode — this only
+  // gates the actions that would change the board's contents.
+  setReadOnly: (readOnly) => set({ readOnly }),
 
   setCamera: (camera) => {
     set((s) => ({
@@ -280,13 +294,14 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
   },
 
   beginInteraction: () => {
+    if (get().readOnly) return
     const els = get().current().elements
     set((s) => ({ past: [...s.past, els.map((e) => ({ ...e }))].slice(-100), future: [] }))
   },
 
   undo: () => {
     const s = get()
-    if (s.past.length === 0) return
+    if (s.readOnly || s.past.length === 0) return
     const prev = s.past[s.past.length - 1]
     const currentEls = s.current().elements
     set({
@@ -300,7 +315,7 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
 
   redo: () => {
     const s = get()
-    if (s.future.length === 0) return
+    if (s.readOnly || s.future.length === 0) return
     const next = s.future[s.future.length - 1]
     const currentEls = s.current().elements
     set({
@@ -312,22 +327,27 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
   },
 
   addElement: (el) => {
+    if (get().readOnly) return
     get().beginInteraction()
     set((s) => writeElements(s, [...s.current().elements, el]) as WhiteboardState)
     persist(get())
   },
 
   addElements: (els) => {
+    if (get().readOnly) return
     get().beginInteraction()
     set((s) => writeElements(s, [...s.current().elements, ...els]) as WhiteboardState)
     persist(get())
   },
 
-  setPendingTemplate: (template) => set({ pendingTemplate: template, tool: "select" }),
+  setPendingTemplate: (template) => {
+    if (get().readOnly) return
+    set({ pendingTemplate: template, tool: "select" })
+  },
 
   // Insert an already-positioned template into the current board.
   addTemplate: (elements) => {
-    if (elements.length === 0) return
+    if (get().readOnly || elements.length === 0) return
     get().beginInteraction()
     set((s) => writeElements(s, [...s.current().elements, ...elements]) as WhiteboardState)
     set({ selectedIds: elements.map((e) => e.id), pendingTemplate: null, tool: "select" })
@@ -337,7 +357,7 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
   // Remove elements by id without touching the current selection. Used for
   // auto-managed blocks (e.g. the sandbox terminal pinned to a channel UI).
   removeElements: (ids) => {
-    if (ids.length === 0) return
+    if (get().readOnly || ids.length === 0) return
     const remove = new Set(ids)
     set((st) => {
       const elements = st.current().elements.filter((e) => !remove.has(e.id))
@@ -350,6 +370,7 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
   },
 
   update: (ids, patch) => {
+    if (get().readOnly) return
     set((s) => {
       const elements = s.current().elements.map((e) =>
         ids.includes(e.id) ? { ...e, ...patch } : e,
@@ -366,7 +387,7 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
 
   deleteSelected: () => {
     const s = get()
-    if (s.selectedIds.length === 0) return
+    if (s.readOnly || s.selectedIds.length === 0) return
     s.beginInteraction()
     set((st) => {
       const removed = collectDependents(st.current().elements, st.selectedIds)
@@ -381,7 +402,7 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
 
   duplicateSelected: () => {
     const s = get()
-    if (s.selectedIds.length === 0) return
+    if (s.readOnly || s.selectedIds.length === 0) return
     s.beginInteraction()
     const originals = s.current().elements.filter((e) => s.selectedIds.includes(e.id))
     const copies = originals.map((e) => ({ ...e, id: uid(), x: e.x + 24, y: e.y + 24 }))
@@ -392,6 +413,7 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
 
   bringToFront: () => {
     const s = get()
+    if (s.readOnly) return
     s.beginInteraction()
     set((st) => {
       const sel = st.current().elements.filter((e) => st.selectedIds.includes(e.id))
@@ -403,6 +425,7 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
 
   sendToBack: () => {
     const s = get()
+    if (s.readOnly) return
     s.beginInteraction()
     set((st) => {
       const sel = st.current().elements.filter((e) => st.selectedIds.includes(e.id))
@@ -416,6 +439,7 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
   // from the top so multiple selected items keep their relative order.
   bringForward: () => {
     const s = get()
+    if (s.readOnly) return
     s.beginInteraction()
     set((st) => {
       const els = [...st.current().elements]
@@ -432,6 +456,7 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
   // Move the selection one step toward the back (earlier in the array).
   sendBackward: () => {
     const s = get()
+    if (s.readOnly) return
     s.beginInteraction()
     set((st) => {
       const els = [...st.current().elements]
@@ -454,7 +479,13 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
     })),
   clearSelection: () => set({ selectedIds: [], editingId: null }),
   selectAll: () => set((s) => ({ selectedIds: s.current().elements.map((e) => e.id) })),
-  setEditing: (id) => set({ editingId: id }),
+  // Entering text-edit mode is itself blocked, rather than relying on the
+  // update() guard, so a read-only viewer never gets a caret in a block they
+  // can't actually change.
+  setEditing: (id) => {
+    if (get().readOnly && id !== null) return
+    set({ editingId: id })
+  },
 
   copy: () => {
     const s = get()
@@ -464,7 +495,7 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
 
   paste: (at) => {
     const s = get()
-    if (s.clipboard.length === 0) return
+    if (s.readOnly || s.clipboard.length === 0) return
     s.beginInteraction()
     const offset = at ? { x: at.x, y: at.y } : { x: 24, y: 24 }
     // anchor to first element for positioning relative to cursor

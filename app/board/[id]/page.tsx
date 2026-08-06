@@ -16,9 +16,13 @@ export default async function BoardPage({
   try {
     board = await getBoard(id)
   } catch {
-    return <BoardEditor board={null} boardId={id} />
+    return <BoardEditor board={null} boardId={id} canEdit />
   }
 
+  // getBoard also returns null for a private board belonging to someone else,
+  // so this covers both "doesn't exist" and "not yours" — deliberately the same
+  // 404, since a distinct 403 would confirm the board exists.
   if (!board) notFound()
-  return <BoardEditor board={board} boardId={id} />
+
+  return <BoardEditor board={board} boardId={id} canEdit={board.isOwner} />
 }

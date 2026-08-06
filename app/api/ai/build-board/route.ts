@@ -4,6 +4,7 @@ import type { MCPClient } from "@ai-sdk/mcp"
 import * as boards from "@/lib/boards/service"
 import { blockSchema, hydrateBlocks, BlockSpecError } from "@/lib/boards/blocks"
 import { openNotionClient, ConsentRequiredError } from "@/lib/connections/notion"
+import { getCurrentUser } from "@/lib/auth"
 import { TYPE_SCALE, CARD } from "@/lib/whiteboard/board-design"
 
 // Chat endpoint that builds Canvas boards from a natural-language conversation.
@@ -88,6 +89,14 @@ export async function POST(req: Request) {
   }
   if (typeof model !== "string" || !model.includes("/")) {
     return Response.json({ error: "A valid Gateway model id is required." }, { status: 400 })
+  }
+
+  // Boards the model builds are owned by whoever asked for them, so there has
+  // to be someone to own them. Checked up front rather than letting the create
+  // tool throw mid-generation, which would burn a model call to reach the same
+  // answer.
+  if (!(await getCurrentUser())) {
+    return Response.json({ error: "Sign in to build boards." }, { status: 401 })
   }
 
   const notionSources = (body.sources ?? []).filter((s) => s?.type === "notion" && s.url)

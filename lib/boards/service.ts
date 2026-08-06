@@ -1,15 +1,27 @@
 import { db } from "@/lib/db"
 import { boards, type BoardData, type BoardRow } from "@/lib/db/schema"
-import { writeBoardData } from "@/lib/db/board-writes"
-import { PUBLIC_LIBRARY_SEED } from "@/lib/whiteboard/public-library-seed"
-import { eq, desc } from "drizzle-orm"
+import { writeBoardData, BoardWriteDeniedError } from "@/lib/db/board-writes"
+import { getCurrentUser, requireUser } from "@/lib/auth"
+import { and, eq, ne, desc } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 
 // Board persistence, shared by the Server Actions in app/actions/boards.ts (the
 // browser UI) and the AI board builder in app/api/ai/build-board/route.ts, so
 // both callers create and mutate boards through exactly one implementation.
+//
+// This is also where access control lives, for the same reason: every caller is
+// request-scoped, so each function resolves the viewer from the session itself
+// instead of trusting an id passed in from above. The rules are:
+//
+//   read   — the owner, or anyone at all once the board is public
+//   write  — the owner, and only the owner, public or not
+//   create — any signed-in user; the board starts private
+//
+// Reads that a viewer isn't entitled to return null (a 404 at the page level)
+// rather than a distinct "forbidden", so private boards don't advertise that
+// they exist. Writes throw BoardWriteDeniedError.
 
-const LIBRARY_OWNER = "vercel-ecosystem"
+export { BoardWriteDeniedError }
 
 export const EMPTY_DATA: BoardData = {
   elements: [],
@@ -30,9 +42,13 @@ export interface BoardSummary {
   authorName: string | null
   description: string | null
   updatedAt: string
+  // Whether the viewer this summary was loaded for owns the board. Drives both
+  // the UI (edit affordances) and the editor's read-only mode; the server
+  // re-checks on every write regardless.
+  isOwner: boolean
 }
 
-function toSummary(row: BoardRow): BoardSummary {
+function toSummary(row: BoardRow, viewerId: string | null): BoardSummary {
   return {
     id: row.id,
     name: row.name,
@@ -41,49 +57,48 @@ function toSummary(row: BoardRow): BoardSummary {
     authorName: row.authorName,
     description: row.description,
     updatedAt: row.updatedAt.toISOString(),
+    isOwner: viewerId !== null && row.ownerId === viewerId,
   }
 }
 
-// Seed the curated public library once. Uses fixed ids + onConflictDoNothing so
-// it is idempotent and safe to call on every public-library read.
-async function ensurePublicLibrarySeeded(): Promise<void> {
-  await db
-    .insert(boards)
-    .values(
-      PUBLIC_LIBRARY_SEED.map((b) => ({
-        id: b.id,
-        ownerId: LIBRARY_OWNER,
-        name: b.name,
-        data: b.data,
-        isPublic: true,
-        authorName: b.authorName,
-        description: b.description,
-      })),
-    )
-    .onConflictDoNothing({ target: boards.id })
-}
+// The signed-in user's own boards, private and public alike. Signed-out
+// visitors own nothing, so they get an empty personal section.
+export async function listMyBoards(): Promise<BoardSummary[]> {
+  const user = await getCurrentUser()
+  if (!user) return []
 
-// Every board is a shared, sign-in-free resource — this is the whole pool,
-// not scoped to any particular viewer.
-export async function listBoards(): Promise<BoardSummary[]> {
-  const rows = await db.select().from(boards).orderBy(desc(boards.updatedAt))
-  return rows.map(toSummary)
-}
-
-export async function listPublicBoards(): Promise<BoardSummary[]> {
-  await ensurePublicLibrarySeeded()
   const rows = await db
     .select()
     .from(boards)
-    .where(eq(boards.isPublic, true))
+    .where(eq(boards.ownerId, user.id))
     .orderBy(desc(boards.updatedAt))
-  return rows.map(toSummary)
+
+  return rows.map((row) => toSummary(row, user.id))
+}
+
+// Boards other people have published. The viewer's own public boards are
+// excluded so they appear once, in the personal section, flagged as public —
+// rather than in both grids.
+export async function listSharedBoards(): Promise<BoardSummary[]> {
+  const user = await getCurrentUser()
+
+  const visible = user
+    ? and(eq(boards.isPublic, true), ne(boards.ownerId, user.id))
+    : eq(boards.isPublic, true)
+
+  const rows = await db.select().from(boards).where(visible).orderBy(desc(boards.updatedAt))
+  return rows.map((row) => toSummary(row, user?.id ?? null))
 }
 
 export async function getBoard(id: string): Promise<BoardSummary | null> {
   const [row] = await db.select().from(boards).where(eq(boards.id, id)).limit(1)
   if (!row) return null
-  return toSummary(row)
+
+  const user = await getCurrentUser()
+  const isOwner = user !== null && row.ownerId === user.id
+  if (!isOwner && !row.isPublic) return null
+
+  return toSummary(row, user?.id ?? null)
 }
 
 export async function createBoard(name?: string): Promise<string> {
@@ -91,14 +106,22 @@ export async function createBoard(name?: string): Promise<string> {
 }
 
 // Create a board pre-populated with data (e.g. from a workflow template, or
-// from an MCP client that authored the whole canvas in one shot).
+// from the AI builder that authored the whole canvas in one shot).
 export async function createBoardFromData(name: string, data: BoardData): Promise<string> {
+  const user = await requireUser()
   const id = uid()
+
   await db.insert(boards).values({
     id,
+    ownerId: user.id,
+    // Captured now rather than joined at read time: there is no users table, so
+    // this is the only record of who made the board once it's shared.
+    authorName: user.displayName,
     name: name?.trim() || "Untitled board",
     data,
+    isPublic: false,
   })
+
   revalidatePath("/")
   return id
 }
@@ -111,21 +134,47 @@ export async function saveBoard(
   id: string,
   patch: { name?: string; data?: BoardData },
 ): Promise<void> {
-  await writeBoardData(id, patch)
+  const user = await requireUser()
+  await writeBoardData(id, user.id, patch)
 }
 
 export async function renameBoard(id: string, name: string): Promise<void> {
+  const user = await requireUser()
+
   // Intentionally do NOT touch updatedAt: renaming is metadata, not a content
   // edit, so it must not change the "Edited …" time or reorder the boards grid
   // (which is sorted by updatedAt desc).
-  await db
+  const result = await db
     .update(boards)
     .set({ name: name.trim() || "Untitled board" })
-    .where(eq(boards.id, id))
+    .where(and(eq(boards.id, id), eq(boards.ownerId, user.id)))
+
+  if (result.rowCount === 0) throw new BoardWriteDeniedError()
+  revalidatePath("/")
+}
+
+// Publish or unpublish a board. Public is read-only for everyone but the owner,
+// so this only widens who can see it — never who can change it.
+export async function setBoardVisibility(id: string, isPublic: boolean): Promise<void> {
+  const user = await requireUser()
+
+  // Visibility is metadata too, so like renameBoard this leaves updatedAt alone.
+  const result = await db
+    .update(boards)
+    .set({ isPublic })
+    .where(and(eq(boards.id, id), eq(boards.ownerId, user.id)))
+
+  if (result.rowCount === 0) throw new BoardWriteDeniedError()
   revalidatePath("/")
 }
 
 export async function deleteBoard(id: string): Promise<void> {
-  await db.delete(boards).where(eq(boards.id, id))
+  const user = await requireUser()
+
+  const result = await db
+    .delete(boards)
+    .where(and(eq(boards.id, id), eq(boards.ownerId, user.id)))
+
+  if (result.rowCount === 0) throw new BoardWriteDeniedError()
   revalidatePath("/")
 }

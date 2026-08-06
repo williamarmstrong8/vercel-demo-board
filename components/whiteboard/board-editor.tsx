@@ -46,11 +46,17 @@ function beaconFlush(boardId: string, project: Project) {
 export function BoardEditor({
   board,
   boardId,
+  canEdit,
 }: {
   board: BoardSummary | null
   boardId: string
+  // False when viewing someone else's public board. Turns the whole surface
+  // into a reader: no autosave, no local draft, no editing chrome. The server
+  // would reject the writes anyway — this stops us from offering them.
+  canEdit: boolean
 }) {
   const loadBoard = useWhiteboard((s) => s.loadBoard)
+  const setReadOnly = useWhiteboard((s) => s.setReadOnly)
   const [ready, setReady] = useState(false)
   const [loadError, setLoadError] = useState(false)
   const revisionRef = useRef(0)
@@ -111,6 +117,11 @@ export function BoardEditor({
   useEffect(() => {
     let cancelled = false
 
+    // Set before loading so the store is already locked by the time the first
+    // element renders — never a frame in which someone else's board looks
+    // editable.
+    setReadOnly(!canEdit)
+
     void (async () => {
       const cloud: Project | null = board
         ? {
@@ -122,6 +133,19 @@ export function BoardEditor({
             updatedAt: new Date(board.updatedAt).getTime(),
           }
         : null
+
+      // A reader can't have produced local edits, and wiring up the draft would
+      // only risk showing them a stale copy of a board they don't control.
+      if (!canEdit) {
+        if (cancelled) return
+        if (!cloud) {
+          setLoadError(true)
+        } else {
+          loadBoard(cloud)
+        }
+        setReady(true)
+        return
+      }
 
       const draft = await readBoardDraft(boardId)
       if (cancelled) return
@@ -149,7 +173,7 @@ export function BoardEditor({
       disableCloudDraft()
       if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [board, boardId, loadBoard, queueAutosave])
+  }, [board, boardId, canEdit, loadBoard, queueAutosave, setReadOnly])
 
   // The debounce above optimizes for the common case, but an edit sitting in
   // that window shouldn't vanish if the tab is hidden or closed before it
@@ -157,6 +181,8 @@ export function BoardEditor({
   // visibilitychange is the reliable one (fires on mobile backgrounding too);
   // beforeunload is a best-effort second chance on top of it.
   useEffect(() => {
+    if (!canEdit) return
+
     const flushNow = () => {
       if (timerRef.current) clearTimeout(timerRef.current)
       const pending = pendingRef.current
@@ -173,10 +199,12 @@ export function BoardEditor({
       document.removeEventListener("visibilitychange", onVisibility)
       window.removeEventListener("beforeunload", flushNow)
     }
-  }, [boardId])
+  }, [boardId, canEdit])
 
   // Cmd/Ctrl+S remains an invisible shortcut that flushes the same autosave queue.
   useEffect(() => {
+    if (!canEdit) return
+
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault()
@@ -186,7 +214,7 @@ export function BoardEditor({
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [queueAutosave])
+  }, [canEdit, queueAutosave])
 
   if (loadError) {
     return (
@@ -214,21 +242,26 @@ export function BoardEditor({
       {/* Top-left: back / board name */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between p-3">
         <div className="pointer-events-auto flex items-center gap-2">
-          <BoardTopBar boardId={boardId} />
+          <BoardTopBar canEdit={canEdit} authorName={board?.authorName ?? null} />
         </div>
       </div>
 
-      {/* Top-center: toolbar */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex justify-center p-3">
-        <div className="pointer-events-auto">
-          <Toolbar />
-        </div>
-      </div>
+      {/* Top-center: toolbar. Drawing tools and the properties panel are the
+          whole editing surface, so a reader simply doesn't get them. */}
+      {canEdit && (
+        <>
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex justify-center p-3">
+            <div className="pointer-events-auto">
+              <Toolbar />
+            </div>
+          </div>
 
-      {/* Right: properties */}
-      <div className="pointer-events-none absolute right-3 top-20 bottom-3 z-30 flex flex-col items-end">
-        <PropertiesPanel />
-      </div>
+          {/* Right: properties */}
+          <div className="pointer-events-none absolute right-3 top-20 bottom-3 z-30 flex flex-col items-end">
+            <PropertiesPanel />
+          </div>
+        </>
+      )}
 
       {/* Bottom-left: zoom */}
       <div className="pointer-events-none absolute bottom-3 left-3 z-30">

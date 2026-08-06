@@ -2,8 +2,13 @@
 
 import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { MoreHorizontal, Pencil, Trash2 } from "lucide-react"
-import { deleteBoard, renameBoard, type BoardSummary } from "@/app/actions/boards"
+import { Globe, Lock, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
+import {
+  deleteBoard,
+  renameBoard,
+  setBoardVisibility,
+  type BoardSummary,
+} from "@/app/actions/boards"
 import { cn } from "@/lib/utils"
 
 function timeAgo(iso: string) {
@@ -49,6 +54,14 @@ export function BoardCard({ board }: { board: BoardSummary }) {
     })
   }
 
+  const toggleVisibility = () => {
+    setMenuOpen(false)
+    startTransition(async () => {
+      await setBoardVisibility(board.id, !board.isPublic)
+      router.refresh()
+    })
+  }
+
   const remove = () => {
     setMenuOpen(false)
     startTransition(async () => {
@@ -78,6 +91,15 @@ export function BoardCard({ board }: { board: BoardSummary }) {
           aria-hidden="true"
           className="pointer-events-none h-full w-full border-0"
         />
+
+        {/* On your own boards this reads as status; the shared grid is public by
+            definition, so a badge there would be noise. */}
+        {board.isOwner && board.isPublic && (
+          <span className="absolute left-2 top-2 flex items-center gap-1 rounded-md bg-foreground/85 px-1.5 py-0.5 text-[11px] font-medium text-background">
+            <Globe className="size-3" />
+            Public
+          </span>
+        )}
       </button>
 
       <div className="flex items-center gap-2 px-3 py-2.5">
@@ -103,41 +125,63 @@ export function BoardCard({ board }: { board: BoardSummary }) {
             </button>
           )}
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
-            Edited {timeAgo(board.updatedAt)}
+            {board.isOwner || !board.authorName
+              ? `Edited ${timeAgo(board.updatedAt)}`
+              : `${board.authorName} · ${timeAgo(board.updatedAt)}`}
           </p>
         </div>
 
-        <div ref={menuRef} className="relative">
-          <button
-            onClick={() => setMenuOpen((o) => !o)}
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100 data-[open=true]:opacity-100"
-            data-open={menuOpen}
-            aria-label="Board options"
-          >
-            <MoreHorizontal className="size-4" />
-          </button>
-          {menuOpen && (
-            <div className="dark absolute right-0 top-full z-20 mt-1 w-36 overflow-hidden rounded-lg border border-border bg-popover py-1 text-popover-foreground shadow-xl">
-              <button
-                onClick={() => {
-                  setMenuOpen(false)
-                  setRenaming(true)
-                }}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted"
-              >
-                <Pencil className="size-3.5" />
-                Rename
-              </button>
-              <button
-                onClick={remove}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-destructive hover:bg-muted"
-              >
-                <Trash2 className="size-3.5" />
-                Delete
-              </button>
-            </div>
-          )}
-        </div>
+        {/* Rename, publish and delete are the owner's alone, so someone else's
+            shared board gets no menu at all. */}
+        {board.isOwner && (
+          <div ref={menuRef} className="relative">
+            <button
+              onClick={() => setMenuOpen((o) => !o)}
+              className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100 data-[open=true]:opacity-100"
+              data-open={menuOpen}
+              aria-label="Board options"
+            >
+              <MoreHorizontal className="size-4" />
+            </button>
+            {menuOpen && (
+              <div className="dark absolute right-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-lg border border-border bg-popover py-1 text-popover-foreground shadow-xl">
+                <button
+                  onClick={() => {
+                    setMenuOpen(false)
+                    setRenaming(true)
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted"
+                >
+                  <Pencil className="size-3.5" />
+                  Rename
+                </button>
+                <button
+                  onClick={toggleVisibility}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted"
+                >
+                  {board.isPublic ? (
+                    <>
+                      <Lock className="size-3.5" />
+                      Make private
+                    </>
+                  ) : (
+                    <>
+                      <Globe className="size-3.5" />
+                      Make public
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={remove}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-destructive hover:bg-muted"
+                >
+                  <Trash2 className="size-3.5" />
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

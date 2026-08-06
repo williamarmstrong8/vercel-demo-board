@@ -1,10 +1,19 @@
 import { NextResponse } from "next/server"
 import { SESSION_COOKIE, verifyIdToken } from "@/lib/auth"
+import { RETURN_TO_COOKIE, safeReturnTo } from "@/lib/session"
 
-const OAUTH_COOKIE_NAMES = ["vercel_oauth_state", "vercel_oauth_nonce", "vercel_oauth_verifier"]
+const OAUTH_COOKIE_NAMES = [
+  "vercel_oauth_state",
+  "vercel_oauth_nonce",
+  "vercel_oauth_verifier",
+  RETURN_TO_COOKIE,
+]
 
-function finish(request: Request, error?: string) {
-  const url = new URL("/", request.url)
+// On failure this lands back on the sign-in page rather than the dashboard: the
+// dashboard is behind the gate, so sending an unauthenticated browser there
+// would only bounce it here anyway, losing the reason it failed on the way.
+function finish(request: Request, error?: string, returnTo?: string | null) {
+  const url = new URL(error ? "/signin" : (returnTo ?? "/"), request.url)
   if (error) url.searchParams.set("auth_error", error)
   const response = NextResponse.redirect(url)
   OAUTH_COOKIE_NAMES.forEach((name) => response.cookies.delete(name))
@@ -30,6 +39,9 @@ export async function GET(request: Request) {
   const stateCookie = cookies.match(/(?:^|; )vercel_oauth_state=([^;]*)/)?.[1]
   const nonce = cookies.match(/(?:^|; )vercel_oauth_nonce=([^;]*)/)?.[1]
   const verifier = cookies.match(/(?:^|; )vercel_oauth_verifier=([^;]*)/)?.[1]
+  const returnTo = safeReturnTo(
+    decodeURIComponent(cookies.match(/(?:^|; )vercel_oauth_return_to=([^;]*)/)?.[1] ?? ""),
+  )
 
   if (!code || !state || !stateCookie || state !== stateCookie || !nonce || !verifier) {
     // The usual cause is the 10-minute cookie window lapsing between clicking
@@ -94,7 +106,7 @@ export async function GET(request: Request) {
     }
 
     const payload = await verifyIdToken(tokens.id_token, nonce)
-    const response = finish(request)
+    const response = finish(request, undefined, returnTo)
     response.cookies.set(SESSION_COOKIE, tokens.id_token, {
       httpOnly: true,
       sameSite: "lax",

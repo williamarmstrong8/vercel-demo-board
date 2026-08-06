@@ -2,10 +2,16 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Eye } from "lucide-react"
 import { useWhiteboard } from "@/lib/whiteboard/store"
 
-export function BoardTopBar({ boardId }: { boardId: string }) {
+export function BoardTopBar({
+  canEdit = true,
+  authorName = null,
+}: {
+  canEdit?: boolean
+  authorName?: string | null
+}) {
   const current = useWhiteboard((s) => s.current())
   const renameProject = useWhiteboard((s) => s.renameProject)
   const [editing, setEditing] = useState(false)
@@ -30,7 +36,7 @@ export function BoardTopBar({ boardId }: { boardId: string }) {
 
       <div className="h-4 w-px bg-white/10" />
 
-      {editing ? (
+      {editing && canEdit ? (
         <input
           autoFocus
           value={draft}
@@ -46,7 +52,7 @@ export function BoardTopBar({ boardId }: { boardId: string }) {
           }}
           className="w-40 rounded border border-white/15 bg-neutral-800 px-1.5 py-0.5 text-sm text-white outline-none focus:border-white/40"
         />
-      ) : (
+      ) : canEdit ? (
         <button
           onClick={() => {
             setDraft(current.name)
@@ -57,6 +63,27 @@ export function BoardTopBar({ boardId }: { boardId: string }) {
         >
           <span className="max-w-[200px] truncate">{current.name}</span>
         </button>
+      ) : (
+        <span className="max-w-[200px] truncate font-medium">{current.name}</span>
+      )}
+
+      {/* Says why the toolbar is missing, and credits whoever shared the board. */}
+      {!canEdit && (
+        <>
+          <div className="h-4 w-px bg-white/10" />
+          <span
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-neutral-800 px-2 py-0.5 text-xs text-neutral-300"
+            title={authorName ? `Shared by ${authorName}` : "Shared board"}
+          >
+            <Eye className="size-3.5" />
+            View only
+            {authorName && (
+              <span className="hidden max-w-[140px] truncate text-neutral-500 sm:inline">
+                · {authorName}
+              </span>
+            )}
+          </span>
+        </>
       )}
     </div>
   )
