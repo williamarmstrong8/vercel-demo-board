@@ -17,8 +17,8 @@ export const TYPE_SCALE = {
 export const CARD = {
   width: 260, // standard card
   wideWidth: 380, // detail-heavy card
-  titleSize: 32, // default card title size (override via a block's `fontSize`)
-  bodySize: 24, // card body size
+  titleSize: 24, // default card title size (override via a block's `fontSize`)
+  bodySize: 18, // card body size
 } as const
 
 // Spacing.

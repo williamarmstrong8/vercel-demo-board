@@ -64,9 +64,9 @@ export function createElement(
         // of real content that gets typed into rather than replaced
         title: "",
         text: "",
-        stroke: "#eaeaea",
+        stroke: "#000000",
         fill: "#ffffff",
-        strokeWidth: 1,
+        strokeWidth: 3,
         rounded: true,
       }
     case "code":
