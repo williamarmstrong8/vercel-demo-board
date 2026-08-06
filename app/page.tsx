@@ -2,6 +2,7 @@ import { listBoards } from "@/app/actions/boards"
 import { BoardCard } from "@/components/home/board-card"
 import { NewBoardButton } from "@/components/home/new-board-button"
 import { AiBoardBuilder } from "@/components/home/ai-board-builder"
+import { getCurrentUser } from "@/lib/auth"
 
 function VercelMark({ className }: { className?: string }) {
   return (
@@ -11,8 +12,12 @@ function VercelMark({ className }: { className?: string }) {
   )
 }
 
-export default async function HomePage() {
-  const boards = await listBoards()
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ auth_error?: string }>
+}) {
+  const [boards, user, params] = await Promise.all([listBoards(), getCurrentUser(), searchParams])
 
   return (
     <main className="light min-h-dvh bg-background text-foreground">
@@ -22,19 +27,46 @@ export default async function HomePage() {
             <VercelMark className="size-4" />
             <span className="text-sm font-semibold tracking-tight">Canvas</span>
           </div>
-          <NewBoardButton />
+          {user ? (
+            <div className="flex items-center gap-3">
+              <span className="hidden text-sm text-muted-foreground sm:inline">
+                {user.name ?? user.username ?? user.email}
+              </span>
+              <form action="/api/auth/signout" method="post">
+                <button className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground" type="submit">
+                  Sign out
+                </button>
+              </form>
+              <NewBoardButton />
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <a
+                className="rounded-md border border-border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+                href="/api/auth/authorize"
+              >
+                Sign in with Vercel
+              </a>
+              <NewBoardButton />
+            </div>
+          )}
         </div>
       </header>
 
       <div className="mx-auto max-w-6xl px-6 py-10">
+        {params.auth_error && (
+          <p className="mb-6 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            Sign in did not complete. Please try again.
+          </p>
+        )}
         {/* Hero */}
         <section className="mb-12">
           <h1 className="text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
             Your infinite whiteboards
           </h1>
           <p className="mt-2 max-w-xl text-pretty leading-relaxed text-muted-foreground">
-            Sketch architectures, flows, and demos on an infinite canvas. Every board is shared
-            and open to anyone — no sign-in required.
+            Sketch architectures, flows, and demos on an infinite canvas. Boards remain shared
+            and open to everyone; sign in with Vercel to use your Vercel identity.
           </p>
         </section>
 
