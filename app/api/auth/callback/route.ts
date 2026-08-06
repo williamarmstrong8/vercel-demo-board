@@ -46,10 +46,19 @@ export async function GET(request: Request) {
       }),
     })
 
-    if (!tokenResponse.ok) return finish(request, "token_exchange_failed")
+    if (!tokenResponse.ok) {
+      console.error("Vercel OAuth token exchange failed", {
+        status: tokenResponse.status,
+        statusText: tokenResponse.statusText,
+      })
+      return finish(request, "token_exchange_failed")
+    }
 
     const tokens = (await tokenResponse.json()) as { id_token?: string }
-    if (!tokens.id_token) return finish(request, "missing_id_token")
+    if (!tokens.id_token) {
+      console.error("Vercel OAuth response did not include an ID token")
+      return finish(request, "missing_id_token")
+    }
 
     const payload = await verifyIdToken(tokens.id_token, nonce)
     const response = finish(request)
@@ -61,7 +70,10 @@ export async function GET(request: Request) {
       expires: payload.exp ? new Date(payload.exp * 1000) : undefined,
     })
     return response
-  } catch {
+  } catch (error) {
+    console.error("Vercel OAuth callback failed", {
+      error: error instanceof Error ? error.message : "Unknown error",
+    })
     return finish(request, "sign_in_failed")
   }
 }
