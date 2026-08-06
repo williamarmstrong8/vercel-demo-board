@@ -73,7 +73,7 @@ export default async function HomePage() {
               </span>
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Boards other people have made public. Open to read — only their owner can edit them.
+              Boards other people have made public. Open to read; only their owner can edit them.
             </p>
           </div>
 

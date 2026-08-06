@@ -24,6 +24,11 @@ interface ChatMessage {
   content: string
   board?: BuiltBoard
   error?: boolean
+  // The session cookie is a plain ID token with no refresh, so it can quietly
+  // expire while this page is left open — the homepage itself still looks
+  // signed in until the next hard navigation. Surface a real way out instead
+  // of a dead-end error bubble.
+  needsSignIn?: boolean
 }
 
 // A page/document the AI should read while building. Notion for now.
@@ -272,6 +277,16 @@ function BuilderModal({ onClose }: { onClose: () => void }) {
             content:
               "Connect your Notion account in the popup that just opened, then send your message again to build from those pages.",
             error: true,
+          },
+        ])
+      } else if (res.status === 401) {
+        setMessages((m) => [
+          ...m,
+          {
+            role: "assistant",
+            content: "Your session expired. Sign in again to keep building.",
+            error: true,
+            needsSignIn: true,
           },
         ])
       } else if (!res.ok || data.error) {
@@ -590,6 +605,18 @@ function MessageRow({
       >
         {message.content}
       </div>
+      {message.needsSignIn && (
+        <button
+          type="button"
+          onClick={() => {
+            const next = window.location.pathname + window.location.search
+            window.location.href = `/api/auth/authorize?next=${encodeURIComponent(next)}`
+          }}
+          className="self-start rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
+        >
+          Sign in
+        </button>
+      )}
       {message.board && (
         <button
           type="button"
