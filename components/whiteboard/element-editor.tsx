@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef } from "react"
 import { useWhiteboard } from "@/lib/whiteboard/store"
 import { getBounds } from "@/lib/whiteboard/geometry"
 import { getCodeTheme } from "@/lib/whiteboard/code-themes"
+import { CARD } from "@/lib/whiteboard/board-design"
 
 export function ElementEditor({ id }: { id: string }) {
   const el = useWhiteboard((s) =>
@@ -15,6 +16,8 @@ export function ElementEditor({ id }: { id: string }) {
   const settled = useRef(false)
 
   const textRef = useRef<HTMLTextAreaElement>(null)
+  // The card body textarea, so Enter in the title can jump straight to it.
+  const bodyRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     settled.current = false
@@ -55,6 +58,22 @@ export function ElementEditor({ id }: { id: string }) {
       update([id], { height: next })
     }
   }, [el, id, update])
+
+  // Grow the card's title + description textareas to fit their content (each at
+  // least one line, so an empty card still shows the placeholder line and a long
+  // title wraps). The card editor then hugs its content with no extra padding.
+  useLayoutEffect(() => {
+    if (!el || el.type !== "card") return
+    const grow = (t: HTMLTextAreaElement | null, minH: number) => {
+      if (!t) return
+      t.style.height = "auto"
+      t.style.height = `${Math.max(minH, Math.ceil(t.scrollHeight))}px`
+    }
+    // title: one line at its font size + top/bottom padding (12 + 8)
+    grow(textRef.current, Math.round((el.fontSize ?? CARD.titleSize) * 1.34) + 20)
+    // description: one line at the body size + bottom padding (14)
+    grow(bodyRef.current, Math.round(CARD.bodySize * 1.5) + 14)
+  }, [el, id])
 
   if (!el) return null
   const b = getBounds(el)
@@ -222,38 +241,59 @@ export function ElementEditor({ id }: { id: string }) {
         left: b.x,
         top: b.y,
         width: b.width,
-        height: b.height,
+        // Hug the content: title + a description field that's one line when
+        // empty and grows as you type (see the auto-grow effect above).
+        height: "auto",
         borderRadius: el.rounded ? 12 : 2,
         background: el.fill === "transparent" ? "#ffffff" : el.fill,
-        border: `2px solid #0070f3`,
-        boxShadow: "none",
+        // Draw the focus ring with an inset shadow (not a border) so it doesn't
+        // inset the content — a border would shift the text 2px when editing.
+        boxShadow: "inset 0 0 0 2px #0070f3",
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
         pointerEvents: "auto",
       }}
     >
-      <input
-        ref={textRef as unknown as React.RefObject<HTMLInputElement>}
+      <textarea
+        ref={textRef}
+        className="wb-scroll-native"
         value={el.title || ""}
+        rows={1}
         onChange={(e) => update([id], { title: e.target.value })}
-        onKeyDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          // Enter moves focus to the description (no newline in the title), so
+          // you can type it right after naming the card.
+          if (e.key === "Enter") {
+            e.preventDefault()
+            bodyRef.current?.focus()
+          }
+          e.stopPropagation()
+        }}
         placeholder="Card title"
         style={{
+          // A textarea (not input) so a long title wraps to multiple lines just
+          // like CardView's static title div, instead of scrolling sideways.
+          overflow: "hidden",
+          resize: "none",
           border: "none",
           outline: "none",
-          // padding + line-height match CardView's static title div exactly —
-          // any mismatch there reads as the text jumping when edit starts
+          // padding + font + line-height + wrapping match CardView's title div
+          // exactly — any mismatch reads as the text jumping when edit starts
           padding: "12px 16px 8px",
           fontFamily: "var(--font-sans)",
           fontWeight: 600,
-          fontSize: 18,
-          lineHeight: "24px",
+          fontSize: el.fontSize ?? CARD.titleSize,
+          lineHeight: 1.34,
           color: "#000",
           background: "transparent",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          overflowWrap: "anywhere",
         }}
       />
       <textarea
+        ref={bodyRef}
         className="wb-scroll-native"
         value={el.text || ""}
         onChange={(e) => update([id], { text: e.target.value })}
@@ -264,13 +304,14 @@ export function ElementEditor({ id }: { id: string }) {
         }}
         placeholder="Add a description..."
         style={{
-          flex: 1,
+          // Height is driven by the auto-grow effect so the box hugs the text.
+          overflow: "hidden",
           border: "none",
           outline: "none",
           resize: "none",
           padding: "0 16px 14px",
           fontFamily: "var(--font-sans)",
-          fontSize: 14,
+          fontSize: CARD.bodySize,
           lineHeight: 1.5,
           color: "#444",
           background: "transparent",

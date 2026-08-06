@@ -19,7 +19,7 @@ import {
   Check,
 } from "lucide-react"
 import { useWhiteboard } from "@/lib/whiteboard/store"
-import type { CanvasElement, CodeThemeId } from "@/lib/whiteboard/types"
+import type { CanvasElement, CodeThemeId, Sloppiness } from "@/lib/whiteboard/types"
 import { CODE_THEMES } from "@/lib/whiteboard/code-themes"
 import { CODE_PRESETS } from "@/lib/whiteboard/code-presets"
 import { AGENT_STRUCTURES, EVE_ADD_CATEGORIES, EVE_CHANNELS, type EveStructureTemplate } from "@/lib/whiteboard/eve-templates"
@@ -28,7 +28,7 @@ import { cn } from "@/lib/utils"
 // 3 shades per hue: dark -> mid -> light (rendered column-major, so each
 // column reads dark at the top down to light at the bottom)
 const STROKE_COLORS = [
-  ["#171717", "#525252", "#a3a3a3"], // neutral
+  ["#171717", "#525252", "#ffffff"], // neutral
   ["#0049b0", "#0070f3", "#66b2ff"], // blue
   ["#b42318", "#e5484d", "#f7a4a4"], // red
   ["#0a7d3f", "#17c964", "#6ee7b7"], // green
@@ -37,7 +37,7 @@ const STROKE_COLORS = [
 ]
 
 const FILL_COLORS = [
-  ["#a1a1aa", "#d4d4d8", "#f4f4f5"], // neutral
+  ["#a1a1aa", "#d4d4d8", "#ffffff"], // neutral
   ["#7cb8ff", "#bcdcff", "#e6f0ff"], // blue
   ["#ff9a9a", "#ffc7c7", "#ffe5e5"], // red
   ["#86efac", "#bbf7d0", "#dcfce7"], // green
@@ -46,6 +46,15 @@ const FILL_COLORS = [
 ]
 
 const NO_STROKE = "transparent"
+
+const STROKE_PRESET_SET = new Set(STROKE_COLORS.flat())
+const FILL_PRESET_SET = new Set(FILL_COLORS.flat())
+
+const SLOPPINESS_LABELS: Record<Sloppiness, string> = {
+  0: "Clean",
+  1: "Sketchy",
+  2: "Very sketchy",
+}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -289,16 +298,6 @@ export function PropertiesPanel() {
         )}
 
         {first.type === "server" && (
-          <Section title="Smart connect">
-            <Toggle
-              checked={first.smartConnect !== false}
-              onChange={(v) => updateWithHistory(ids, { smartConnect: v })}
-              label={first.smartConnect !== false ? "Reflects upstream node" : "Custom block"}
-            />
-          </Section>
-        )}
-
-        {first.type === "server" && first.smartConnect === false && (
           <>
             <Section title="Method">
               <div className="grid grid-cols-4 gap-1.5">
@@ -362,6 +361,10 @@ export function PropertiesPanel() {
   const hasStrokeWidth = selected.some((e) => e.type !== "image" && e.type !== "text")
   const hasFill = selected.some((e) => ["rectangle", "ellipse", "diamond", "card"].includes(e.type))
   const hasText = selected.some((e) => e.type === "text")
+  // only the drawn shapes are rendered from geometry we can sketch
+  const hasSloppiness = selected.some((e) => ["rectangle", "ellipse", "diamond"].includes(e.type))
+  // an ellipse has no corners, and a diamond's are always mitred
+  const hasEdges = selected.some((e) => ["rectangle", "card"].includes(e.type))
   const strokeLabel = hasText && !hasStrokeWidth ? "Color" : "Stroke"
   const common = <K extends keyof CanvasElement>(key: K): CanvasElement[K] | undefined =>
     selected.every((e) => e[key] === first[key]) ? first[key] : undefined
@@ -371,6 +374,8 @@ export function PropertiesPanel() {
   const fontSize = (common("fontSize") as number) ?? 24
   const strokeWidthVal = (common("strokeWidth") as number) ?? 2
   const opacityVal = (common("opacity") as number) ?? 1
+  const sloppinessVal = (common("sloppiness") as Sloppiness | undefined) ?? 0
+  const roundedVal = common("rounded") as boolean | undefined
 
   return (
     <div className="pointer-events-auto flex max-h-full w-60 flex-col overflow-hidden rounded-xl border border-border bg-card">
@@ -390,23 +395,27 @@ export function PropertiesPanel() {
 
       <div className="flex-1 overflow-y-auto overscroll-contain">
       {hasStroke && (() => {
-        const strokeColorInput = (
-          <ColorInput
-            value={currentStroke && currentStroke.startsWith("#") ? currentStroke : "#171717"}
-            onChange={(v) => update(ids, { stroke: v })}
-            onStart={beginInteraction}
-          />
+        const isCustomStroke = !!currentStroke && currentStroke.startsWith("#") && !STROKE_PRESET_SET.has(currentStroke)
+        const strokeColorColumn = (
+          <div className="flex flex-col gap-1.5">
+            {/* no-stroke option (only meaningful for shapes with a width) */}
+            {hasStrokeWidth && (
+              <NoStrokeSwatch active={currentStroke === NO_STROKE} onClick={() => updateWithHistory(ids, { stroke: NO_STROKE })} />
+            )}
+            {isCustomStroke && (
+              <CustomColorSwatch value={currentStroke!} onChange={(v) => update(ids, { stroke: v })} onStart={beginInteraction} />
+            )}
+            <ColorInput
+              value={currentStroke && currentStroke.startsWith("#") ? currentStroke : "#171717"}
+              onChange={(v) => update(ids, { stroke: v })}
+              onStart={beginInteraction}
+            />
+          </div>
         )
         return (
           <Section title={strokeLabel}>
             <div className="flex items-start gap-2">
-              {/* no-stroke option (only meaningful for shapes with a width) */}
-              {hasStrokeWidth && (
-                <div className="flex flex-col gap-1.5">
-                  <NoStrokeSwatch active={currentStroke === NO_STROKE} onClick={() => updateWithHistory(ids, { stroke: NO_STROKE })} />
-                  {strokeColorInput}
-                </div>
-              )}
+              {hasStrokeWidth && strokeColorColumn}
               <div className="grid grid-cols-6 grid-flow-col grid-rows-3 gap-1.5">
                 {STROKE_COLORS.map((shades) =>
                   shades.map((c) => (
@@ -414,34 +423,41 @@ export function PropertiesPanel() {
                   )),
                 )}
               </div>
-              {!hasStrokeWidth && strokeColorInput}
+              {!hasStrokeWidth && strokeColorColumn}
             </div>
           </Section>
         )
       })()}
 
-      {hasFill && (
-        <Section title="Fill">
-          <div className="flex items-start gap-2">
-            <div className="flex flex-col gap-1.5">
-              <NoStrokeSwatch active={currentFill === "transparent"} onClick={() => updateWithHistory(ids, { fill: "transparent" })} />
-              <ColorInput
-                value={currentFill && currentFill.startsWith("#") ? currentFill : "#ffffff"}
-                onChange={(v) => update(ids, { fill: v })}
-                onStart={beginInteraction}
-              />
+      {hasFill && (() => {
+        const isCustomFill = !!currentFill && currentFill.startsWith("#") && !FILL_PRESET_SET.has(currentFill)
+        return (
+          <Section title="Fill">
+            <div className="flex items-start gap-2">
+              <div className="flex flex-col gap-1.5">
+                <NoStrokeSwatch active={currentFill === "transparent"} onClick={() => updateWithHistory(ids, { fill: "transparent" })} />
+                {isCustomFill && (
+                  <CustomColorSwatch value={currentFill!} onChange={(v) => update(ids, { fill: v })} onStart={beginInteraction} />
+                )}
+                <ColorInput
+                  value={currentFill && currentFill.startsWith("#") ? currentFill : "#ffffff"}
+                  onChange={(v) => update(ids, { fill: v })}
+                  onStart={beginInteraction}
+                />
+              </div>
+              <div className="grid grid-cols-6 grid-flow-col grid-rows-3 gap-1.5">
+                {FILL_COLORS.map((shades) =>
+                  shades.map((c) => (
+                    <Swatch key={c} color={c} active={currentFill === c} onClick={() => updateWithHistory(ids, { fill: c })} />
+                  )),
+                )}
+              </div>
             </div>
-            <div className="grid grid-cols-6 grid-flow-col grid-rows-3 gap-1.5">
-              {FILL_COLORS.map((shades) =>
-                shades.map((c) => (
-                  <Swatch key={c} color={c} active={currentFill === c} onClick={() => updateWithHistory(ids, { fill: c })} />
-                )),
-              )}
-            </div>
-          </div>
-        </Section>
-      )}
+          </Section>
+        )
+      })()}
 
+      {(hasStrokeWidth || hasText) && (
       <Section title="Style">
         {hasStrokeWidth && (
           <Row label="Stroke width">
@@ -482,32 +498,55 @@ export function PropertiesPanel() {
             />
           </Row>
         )}
-        <Row label="Opacity">
-          <div className="flex flex-1 items-center gap-2">
-            <input
-              type="range"
-              min={0.1}
-              max={1}
-              step={0.05}
-              value={opacityVal}
-              onPointerDown={beginInteraction}
-              onChange={(e) => update(ids, { opacity: Number(e.target.value) })}
-              className="wb-range"
-            />
-            <input
-              type="number"
-              min={10}
-              max={100}
-              value={Math.round(opacityVal * 100)}
-              onFocus={beginInteraction}
-              onChange={(e) => {
-                const n = Number(e.target.value)
-                if (!Number.isNaN(n)) update(ids, { opacity: Math.max(0.1, Math.min(1, Math.round(n) / 100)) })
-              }}
-              className="h-6 w-9 shrink-0 rounded-md border border-border bg-background text-center text-[11px] tabular-nums outline-none focus:border-foreground/40"
-            />
+      </Section>
+      )}
+
+      {hasSloppiness && (
+        <Section title="Sloppiness">
+          <div className="flex gap-1.5">
+            {([0, 1, 2] as Sloppiness[]).map((level) => (
+              <OptionBtn
+                key={level}
+                title={SLOPPINESS_LABELS[level]}
+                active={sloppinessVal === level}
+                onClick={() => updateWithHistory(ids, { sloppiness: level })}
+              >
+                <SloppinessIcon level={level} />
+              </OptionBtn>
+            ))}
           </div>
-        </Row>
+        </Section>
+      )}
+
+      {hasEdges && (
+        <Section title="Edges">
+          <div className="flex gap-1.5">
+            <OptionBtn title="Sharp" active={roundedVal === false} onClick={() => updateWithHistory(ids, { rounded: false })}>
+              <EdgeIcon rounded={false} />
+            </OptionBtn>
+            <OptionBtn title="Round" active={roundedVal === true} onClick={() => updateWithHistory(ids, { rounded: true })}>
+              <EdgeIcon rounded />
+            </OptionBtn>
+          </div>
+        </Section>
+      )}
+
+      <Section title="Opacity">
+        <input
+          type="range"
+          min={0.1}
+          max={1}
+          step={0.05}
+          value={opacityVal}
+          onPointerDown={beginInteraction}
+          onChange={(e) => update(ids, { opacity: Number(e.target.value) })}
+          className="wb-range"
+        />
+        <div className="mt-1.5 flex items-center justify-between text-[10px] tabular-nums text-muted-foreground">
+          <span>10</span>
+          <span className="font-medium text-foreground">{Math.round(opacityVal * 100)}</span>
+          <span>100</span>
+        </div>
       </Section>
 
       {selected.length === 1 && ["ec2", "fluidcompute", "serverlesscompute"].includes(first.type) && (
@@ -760,6 +799,61 @@ function FormatBtn({
   )
 }
 
+// Equal-width toggle in a row of mutually exclusive choices (sloppiness, edges).
+function OptionBtn({
+  children,
+  active,
+  title,
+  onClick,
+}: {
+  children: React.ReactNode
+  active: boolean
+  title: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      title={title}
+      onClick={onClick}
+      className={cn(
+        "flex h-8 flex-1 items-center justify-center rounded-md border transition-colors",
+        active
+          ? "border-foreground bg-muted text-foreground"
+          : "border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
+// A line that gets progressively less steady, matching what each level does to
+// a shape's outline.
+function SloppinessIcon({ level }: { level: Sloppiness }) {
+  const paths: Record<Sloppiness, string[]> = {
+    0: ["M2 8.5c3.5-1 8.5-1 12 0"],
+    1: ["M2 9.5c2-3 4 2 6-0.5s4 2.5 6-1"],
+    2: ["M2 10c1.5-4.5 3.5 3 5.5-1.5s3.5 4 5.5-1", "M2.5 8.5c2 3 4-2.5 6 0.5"],
+  }
+  return (
+    <svg viewBox="0 0 16 16" className="size-4" fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinecap="round">
+      {paths[level].map((d, i) => (
+        <path key={i} d={d} />
+      ))}
+    </svg>
+  )
+}
+
+function EdgeIcon({ rounded }: { rounded?: boolean }) {
+  return (
+    <svg viewBox="0 0 16 16" className="size-4" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round">
+      {rounded ? <path d="M4 13V8a4 4 0 0 1 4-4h5" /> : <path d="M4 13V4h9" />}
+      <path d="M4 13h9" strokeDasharray="1.5 2" strokeOpacity={0.4} />
+      <path d="M13 13V4" strokeDasharray="1.5 2" strokeOpacity={0.4} />
+    </svg>
+  )
+}
+
 function IconBtn({ children, title, onClick }: { children: React.ReactNode; title: string; onClick: () => void }) {
   return (
     <button
@@ -803,6 +897,35 @@ function NoStrokeSwatch({ active, onClick }: { active: boolean; onClick: () => v
   )
 }
 
+// Shows the currently-applied color when it isn't one of the presets, ring-
+// highlighted like a selected swatch. Sits above the "+" button, and still
+// opens the native picker so the exact custom color can be fine-tuned.
+function CustomColorSwatch({
+  value,
+  onChange,
+  onStart,
+}: {
+  value: string
+  onChange: (v: string) => void
+  onStart: () => void
+}) {
+  return (
+    <label
+      title={value}
+      className="relative size-6 shrink-0 cursor-pointer overflow-hidden rounded-md border border-transparent ring-2 ring-foreground ring-offset-1 ring-offset-card transition-transform hover:scale-110"
+      style={{ background: value }}
+    >
+      <input
+        type="color"
+        value={value}
+        onPointerDown={onStart}
+        onChange={(e) => onChange(e.target.value)}
+        className="absolute inset-0 cursor-pointer opacity-0"
+      />
+    </label>
+  )
+}
+
 function ColorInput({
   value,
   onChange,
@@ -813,7 +936,10 @@ function ColorInput({
   onStart: () => void
 }) {
   return (
-    <label className="relative size-6 shrink-0 cursor-pointer overflow-hidden rounded-md border border-border">
+    <label
+      title="Custom color"
+      className="relative size-6 shrink-0 cursor-pointer overflow-hidden rounded-md border border-border transition-transform hover:scale-110"
+    >
       <span className="flex size-full items-center justify-center text-[9px] font-bold text-muted-foreground">+</span>
       <input
         type="color"

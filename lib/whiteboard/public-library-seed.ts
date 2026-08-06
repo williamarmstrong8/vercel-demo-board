@@ -52,7 +52,7 @@ function board(
     name,
     authorName,
     description,
-    data: { elements, connections: [], camera: { x: 0, y: 0, zoom: 1 } },
+    data: { elements, camera: { x: 0, y: 0, zoom: 1 } },
   }
 }
 

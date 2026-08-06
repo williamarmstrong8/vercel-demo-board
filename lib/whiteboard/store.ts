@@ -1,7 +1,7 @@
 "use client"
 
 import { create } from "zustand"
-import type { CanvasElement, Camera, Project, Tool, Connection, RunPhase } from "./types"
+import type { CanvasElement, Camera, Project, Tool, RunPhase } from "./types"
 import { putImage, getImage, deleteImages } from "./image-store"
 
 function uid() {
@@ -23,7 +23,6 @@ function emptyProject(name = "Untitled board"): Project {
     createdAt: Date.now(),
     updatedAt: Date.now(),
     elements: [],
-    connections: [],
     camera: { x: 0, y: 0, zoom: 1 },
   }
 }
@@ -87,7 +86,7 @@ export async function readBoardDraft(id: string): Promise<Project | null> {
     if (!raw) return null
     const p = JSON.parse(raw) as Project
     const elements = await rehydrateImageBlobs(p.elements ?? [])
-    return { ...p, elements, connections: p.connections ?? [] }
+    return { ...p, elements }
   } catch {
     return null
   }
@@ -145,8 +144,8 @@ interface WhiteboardState {
   past: CanvasElement[][]
   future: CanvasElement[][]
 
-  // workflow + placement: transient (not persisted)
-  pendingTemplate: { elements: CanvasElement[]; connections: Connection[] } | null
+  // placement: transient (not persisted)
+  pendingTemplate: { elements: CanvasElement[] } | null
   // id of the shape currently hovered while drawing an arrow/line, so its
   // outline can highlight to show the endpoint will snap to it (not persisted)
   snapTargetId: string | null
@@ -172,8 +171,8 @@ interface WhiteboardState {
   // elements
   addElement: (el: CanvasElement) => void
   addElements: (els: CanvasElement[]) => void
-  setPendingTemplate: (template: { elements: CanvasElement[]; connections: Connection[] } | null) => void
-  addTemplate: (elements: CanvasElement[], connections: Connection[]) => void
+  setPendingTemplate: (template: { elements: CanvasElement[] } | null) => void
+  addTemplate: (elements: CanvasElement[]) => void
   removeElements: (ids: string[]) => void
   update: (ids: string[], patch: Partial<CanvasElement>) => void
   updateWithHistory: (ids: string[], patch: Partial<CanvasElement>) => void
@@ -194,26 +193,11 @@ interface WhiteboardState {
   // clipboard
   copy: () => void
   paste: (at?: { x: number; y: number }) => void
-
-  // workflow connections
-  addConnection: (from: string, to: string) => void
-  removeConnection: (id: string) => void
-
-  // workflow run
-  runFrom: (id: string) => void
-  clearRun: () => void
 }
 
 function writeElements(state: WhiteboardState, elements: CanvasElement[]): Partial<WhiteboardState> {
   const projects = state.projects.map((p) =>
     p.id === state.currentId ? { ...p, elements, updatedAt: Date.now() } : p,
-  )
-  return { projects }
-}
-
-function writeConnections(state: WhiteboardState, connections: Connection[]): Partial<WhiteboardState> {
-  const projects = state.projects.map((p) =>
-    p.id === state.currentId ? { ...p, connections, updatedAt: Date.now() } : p,
   )
   return { projects }
 }
@@ -267,7 +251,7 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
   // itself touch localStorage.
   loadBoard: (project) => {
     set({
-      projects: [{ ...project, connections: project.connections ?? [] }],
+      projects: [{ ...project }],
       currentId: project.id,
       selectedIds: [],
       editingId: null,
@@ -341,12 +325,11 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
 
   setPendingTemplate: (template) => set({ pendingTemplate: template, tool: "select" }),
 
-  // Insert an already-positioned, pre-wired template into the current board.
-  addTemplate: (elements, connections) => {
+  // Insert an already-positioned template into the current board.
+  addTemplate: (elements) => {
     if (elements.length === 0) return
     get().beginInteraction()
     set((s) => writeElements(s, [...s.current().elements, ...elements]) as WhiteboardState)
-    set((s) => writeConnections(s, [...s.current().connections, ...connections]) as WhiteboardState)
     set({ selectedIds: elements.map((e) => e.id), pendingTemplate: null, tool: "select" })
     persist(get())
   },
@@ -358,9 +341,8 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
     const remove = new Set(ids)
     set((st) => {
       const elements = st.current().elements.filter((e) => !remove.has(e.id))
-      const connections = st.current().connections.filter((c) => !remove.has(c.from) && !remove.has(c.to))
       const projects = st.projects.map((p) =>
-        p.id === st.currentId ? { ...p, elements, connections, updatedAt: Date.now() } : p,
+        p.id === st.currentId ? { ...p, elements, updatedAt: Date.now() } : p,
       )
       return { projects, selectedIds: st.selectedIds.filter((id) => !remove.has(id)) }
     })
@@ -389,9 +371,8 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
     set((st) => {
       const removed = collectDependents(st.current().elements, st.selectedIds)
       const elements = st.current().elements.filter((e) => !removed.has(e.id))
-      const connections = st.current().connections.filter((c) => !removed.has(c.from) && !removed.has(c.to))
       const projects = st.projects.map((p) =>
-        p.id === st.currentId ? { ...p, elements, connections, updatedAt: Date.now() } : p,
+        p.id === st.currentId ? { ...p, elements, updatedAt: Date.now() } : p,
       )
       return { projects, selectedIds: [], editingId: null }
     })
@@ -498,56 +479,6 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
     set({ selectedIds: copies.map((c) => c.id) })
     persist(get())
   },
-
-  addConnection: (from, to) => {
-    if (from === to) return
-    const s = get()
-    const existing = s.current().connections
-    // no duplicates in either direction
-    if (existing.some((c) => (c.from === from && c.to === to) || (c.from === to && c.to === from))) return
-    const conn: Connection = { id: uid(), from, to }
-    set((st) => writeConnections(st, [...st.current().connections, conn]) as WhiteboardState)
-    persist(get())
-  },
-
-  removeConnection: (id) => {
-    set((st) => writeConnections(st, st.current().connections.filter((c) => c.id !== id)) as WhiteboardState)
-    persist(get())
-  },
-
-  runFrom: (id) => {
-    const s = get()
-    const conns = s.current().connections
-    // Breadth-first ordering of nodes reachable from the trigger (outgoing edges).
-    const order: string[] = []
-    const seen = new Set<string>()
-    const queue = [id]
-    while (queue.length) {
-      const cur = queue.shift() as string
-      if (seen.has(cur)) continue
-      seen.add(cur)
-      order.push(cur)
-      for (const c of conns) {
-        if (c.from === cur && !seen.has(c.to)) queue.push(c.to)
-      }
-    }
-
-    // Reset then animate each node in sequence: running -> done.
-    set({ runStates: {} })
-    const STEP = 900
-    order.forEach((nodeId, i) => {
-      window.setTimeout(() => {
-        set((st) => ({ runStates: { ...st.runStates, [nodeId]: "running" } }))
-      }, i * STEP)
-      window.setTimeout(() => {
-        set((st) => ({ runStates: { ...st.runStates, [nodeId]: "done" } }))
-      }, i * STEP + STEP - 150)
-    })
-    // Finished runs stay on screen — the user resets manually via the reset
-    // control next to the Run button.
-  },
-
-  clearRun: () => set({ runStates: {} }),
 }))
 
 export { uid }

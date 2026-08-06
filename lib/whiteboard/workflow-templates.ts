@@ -1,14 +1,14 @@
-import type { CanvasElement, Connection, ElementType, Tool } from "./types"
+import type { CanvasElement, ElementType, Tool } from "./types"
 import { createElement } from "./factory"
 import { uid } from "./store"
 
 /**
- * A reusable, pre-wired workflow: a set of nodes laid out on the canvas plus the
- * connections between them. Selecting one from the library spins up a fresh
- * board so common flows never have to be rebuilt by hand.
+ * A reusable set of nodes laid out on the canvas. Selecting one from the
+ * library spins up a fresh board so common layouts never have to be rebuilt by
+ * hand.
  */
 export interface TemplateNode {
-  ref: string // local id used to declare connections
+  ref: string // local id for the node
   type: ElementType
   x: number
   y: number
@@ -22,7 +22,6 @@ export interface WorkflowTemplate {
   // A tiny preview: ordered node "kinds" rendered as chips in the library card.
   preview: string[]
   nodes: TemplateNode[]
-  connections: [from: string, to: string][]
 }
 
 const STYLE = { stroke: "#000000", fill: "transparent", strokeWidth: 2 }
@@ -109,32 +108,22 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
         },
       },
     ],
-    connections: [],
   },
 ]
 
 /**
- * Turns a template definition into concrete elements + connections with fresh,
- * unique ids (remapping the local refs used to declare the connections).
+ * Turns a template definition into concrete elements with fresh, unique ids.
  */
 export function instantiateTemplate(t: WorkflowTemplate): {
   elements: CanvasElement[]
-  connections: Connection[]
 } {
-  const idMap = new Map<string, string>()
   const requestScope = uid()
   const computeDemoTypes: ElementType[] = ["requestdemo", "ec2", "fluidcompute", "serverlesscompute"]
   const elements = t.nodes.map((n) => {
     // Workflow nodes are always drawable element types (never the auto-spawned
     // "sandbox"), so this narrowing to Tool is safe.
     const el = createElement(n.type as Tool, n.x, n.y, STYLE)
-    idMap.set(n.ref, el.id)
     return { ...el, ...n.overrides, ...(computeDemoTypes.includes(n.type) ? { requestScope } : {}) }
   })
-  const connections: Connection[] = t.connections.map(([from, to]) => ({
-    id: uid(),
-    from: idMap.get(from) as string,
-    to: idMap.get(to) as string,
-  }))
-  return { elements, connections }
+  return { elements }
 }

@@ -1,6 +1,7 @@
 import { listBoards } from "@/app/actions/boards"
 import { BoardCard } from "@/components/home/board-card"
 import { NewBoardButton } from "@/components/home/new-board-button"
+import { AiBoardBuilder } from "@/components/home/ai-board-builder"
 
 function VercelMark({ className }: { className?: string }) {
   return (
@@ -57,6 +58,8 @@ export default async function HomePage() {
         </section>
 
       </div>
+
+      <AiBoardBuilder />
     </main>
   )
 }

@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useWhiteboard } from "@/lib/whiteboard/store"
 import { getSelectionBounds } from "@/lib/whiteboard/geometry"
 import { CanvasElementView } from "@/components/whiteboard/canvas-element"
-import { ConnectionCurves } from "@/components/whiteboard/workflow-connections"
 import type { BoardSummary } from "@/app/actions/boards"
 import type { Project } from "@/lib/whiteboard/types"
 
@@ -13,20 +12,19 @@ const MAX_ZOOM = 1 // never zoom past 1:1 — tiny boards shouldn't look blown u
 
 /**
  * A pixel-perfect, read-only render of a board. It reuses the EXACT same
- * element + connection renderers as the live canvas (CanvasElementView,
- * ConnectionCurves) rather than re-implementing them, so the preview can never
- * drift from the real thing. Rendered inside its own iframe on the boards grid,
- * so each instance gets an isolated whiteboard store.
+ * element renderer as the live canvas (CanvasElementView) rather than
+ * re-implementing it, so the preview can never drift from the real thing.
+ * Rendered inside its own iframe on the boards grid, so each instance gets an
+ * isolated whiteboard store.
  */
 export function BoardPreviewCanvas({ board }: { board: BoardSummary }) {
   const loadBoard = useWhiteboard((s) => s.loadBoard)
   const containerRef = useRef<HTMLDivElement>(null)
   const [ready, setReady] = useState(false)
 
-  // Elements/connections come straight from the board prop so the render never
-  // races the store subscription. We still push them into this iframe's
-  // isolated store (below) so the shared renderers' internal store lookups
-  // (run state, connections, smart-connect API context) resolve correctly.
+  // Elements come straight from the board prop so the render never races the
+  // store subscription. We still push them into this iframe's isolated store
+  // (below) so the shared renderer's internal store lookups resolve correctly.
   const elements = useMemo(() => board.data.elements ?? [], [board])
 
   // Load the board into this iframe's isolated store exactly once, so child
@@ -37,7 +35,6 @@ export function BoardPreviewCanvas({ board }: { board: BoardSummary }) {
       id: board.id,
       name: board.name,
       elements,
-      connections: board.data.connections ?? [],
       camera: { x: 0, y: 0, zoom: 1 },
       createdAt: now,
       updatedAt: now,
@@ -107,7 +104,6 @@ export function BoardPreviewCanvas({ board }: { board: BoardSummary }) {
       style={{ pointerEvents: "none" }}
     >
       <div style={worldStyle}>
-        <ConnectionCurves />
         {elements.map((el) => (
           <CanvasElementView key={el.id} el={el} />
         ))}

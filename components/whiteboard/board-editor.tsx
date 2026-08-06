@@ -37,7 +37,6 @@ function beaconFlush(boardId: string, project: Project) {
     name: project.name,
     data: {
       elements: project.elements,
-      connections: project.connections ?? [],
       camera: project.camera,
     },
   })
@@ -71,7 +70,6 @@ export function BoardEditor({
       name: pending.project.name,
       data: {
         elements: pending.project.elements,
-        connections: pending.project.connections ?? [],
         camera: pending.project.camera,
       },
     })
@@ -119,7 +117,6 @@ export function BoardEditor({
             id: board.id,
             name: board.name,
             elements: board.data.elements ?? [],
-            connections: board.data.connections ?? [],
             camera: board.data.camera ?? { x: 0, y: 0, zoom: 1 },
             createdAt: new Date(board.updatedAt).getTime(),
             updatedAt: new Date(board.updatedAt).getTime(),

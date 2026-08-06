@@ -1,11 +1,10 @@
 import { pgTable, text, jsonb, boolean, timestamp } from "drizzle-orm/pg-core"
-import type { CanvasElement, Connection, Camera } from "@/lib/whiteboard/types"
+import type { CanvasElement, Camera } from "@/lib/whiteboard/types"
 
 // The serialized canvas payload stored in the `data` JSONB column. This mirrors
 // the shape the client store works with for a single board.
 export interface BoardData {
   elements: CanvasElement[]
-  connections: Connection[]
   camera: Camera
 }
 

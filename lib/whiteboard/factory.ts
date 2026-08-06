@@ -39,7 +39,7 @@ export function createElement(
       return { ...base, type: "diamond", fill: DEFAULT_SHAPE_FILL, stroke: "transparent", strokeWidth: 0 }
     // Arrows: thicker default stroke
     case "arrow":
-      return { ...base, type: "arrow", fill: "transparent", stroke: DEFAULT_STROKE, strokeWidth: 4 }
+      return { ...base, type: "arrow", fill: "transparent", stroke: DEFAULT_STROKE, strokeWidth: 3 }
     case "line":
       return { ...base, type: "line", fill: "transparent", stroke: DEFAULT_STROKE, strokeWidth: 3 }
     case "text":

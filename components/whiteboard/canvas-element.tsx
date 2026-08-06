@@ -1,33 +1,19 @@
 "use client"
 
 import { memo, useState, useLayoutEffect, useEffect, useRef, useMemo } from "react"
-import { Play, Loader2, Check, RotateCw, ChevronDown, ChevronRight, Folder, FileText, SquareTerminal, ExternalLink, Waypoints, Server, Send, Zap } from "lucide-react"
+import { Play, Loader2, RotateCw, ChevronDown, ChevronRight, Folder, FileText, SquareTerminal, ExternalLink, Waypoints, Server, Send, Zap } from "lucide-react"
 import type { AgentFile, CanvasElement, RunPhase } from "@/lib/whiteboard/types"
 import { getBounds } from "@/lib/whiteboard/geometry"
 import { getCodeTheme, tokenizeLine } from "@/lib/whiteboard/code-themes"
+import { sketchShape, type SketchShapeType } from "@/lib/whiteboard/sketch"
+import { CARD } from "@/lib/whiteboard/board-design"
 import { createElement } from "@/lib/whiteboard/factory"
 import { useWhiteboard } from "@/lib/whiteboard/store"
-import { getApiContext, METHOD_COLORS, type ApiContext } from "@/lib/whiteboard/workflow"
+import { METHOD_COLORS } from "@/lib/whiteboard/workflow"
 import { channelsForFiles, channelById, type EveChannelMeta } from "@/lib/whiteboard/eve-templates"
 import { GATEWAY_MODELS, gatewayModelById, DEFAULT_GATEWAY_MODEL } from "@/lib/whiteboard/ai-gateway-models"
 import { ChannelChat, CHANNEL_UI_SCALE, s } from "@/components/whiteboard/channel-chat"
 import { ScrollBox } from "@/components/whiteboard/scroll-box"
-
-/**
- * Resolves the upstream API context for a workflow node (server) by reading
- * the current project's elements + connections from the store. Lets a node
- * reflect the API route or endpoint defined by whatever comes before it.
- */
-function useApiContext(el: CanvasElement): ApiContext | null {
-  const elements = useWhiteboard((s) => (s.projects.find((p) => p.id === s.currentId) ?? s.projects[0]).elements)
-  const connections = useWhiteboard((s) => (s.projects.find((p) => p.id === s.currentId) ?? s.projects[0]).connections)
-  return useMemo(() => {
-    // Smart connect is on by default; when explicitly disabled the node keeps
-    // its own custom static config instead of reflecting upstream nodes.
-    if (el.smartConnect === false) return null
-    return getApiContext(el, elements, connections)
-  }, [el, elements, connections])
-}
 
 // Keeps a code/terminal block's height fit to its content. Measures the natural
 // height of the block body and writes it back to the element so selection,
@@ -80,7 +66,6 @@ export const CanvasElementView = memo(function CanvasElementView({ el }: { el: C
   const b = getBounds(el)
   const phase = useWhiteboard((s) => s.runStates[el.id])
   const editing = useWhiteboard((s) => s.editingId === el.id)
-  const connections = useWhiteboard((s) => (s.projects.find((p) => p.id === s.currentId) ?? s.projects[0]).connections)
   const active = phase === "running"
   const isSnapTarget = useWhiteboard((s) => s.snapTargetId === el.id)
   const isLinear = el.type === "arrow" || el.type === "line"
@@ -112,17 +97,9 @@ export const CanvasElementView = memo(function CanvasElementView({ el }: { el: C
     visibility: editing ? "hidden" : undefined,
   }
 
-  // The run control always lives under the *first* node of a workflow: a node
-  // that feeds others (has an outgoing edge) but has nothing feeding into it
-  // (no incoming edge). This makes it the natural trigger for the whole chain.
-  const hasOutgoing = connections.some((c) => c.from === el.id)
-  const hasIncoming = connections.some((c) => c.to === el.id)
-  const isWorkflowRoot = hasOutgoing && !hasIncoming
-
   return (
     <div style={wrapperStyle} data-el-id={el.id}>
       <div style={inner}>{renderContent(el, b, phase)}</div>
-      {isWorkflowRoot && <RunButton id={el.id} phase={phase} />}
       {el.type === "filetree" && <ChannelLogos tree={el} />}
     </div>
   )
@@ -660,120 +637,6 @@ function SandboxFiles({ files }: { files: NonNullable<CanvasElement["sandboxFile
   )
 }
 
-/**
- * Detached run button that sits *below* a code/terminal block. Clicking it
- * triggers the workflow: this node runs, then each connected node downstream
- * activates in sequence.
- */
-function RunButton({ id, phase }: { id: string; phase: RunPhase | undefined }) {
-  const runFrom = useWhiteboard((s) => s.runFrom)
-  const clearRun = useWhiteboard((s) => s.clearRun)
-  const anyRunning = useWhiteboard((s) => Object.values(s.runStates).some((p) => p === "running"))
-  const anyState = useWhiteboard((s) => Object.keys(s.runStates).length > 0)
-  const state = phase === "running" ? "running" : phase === "done" ? "done" : "idle"
-
-  const run = () => {
-    if (anyRunning) return
-    runFrom(id)
-  }
-
-  return (
-    <div
-      style={{
-        position: "absolute",
-        top: "calc(100% + 10px)",
-        left: 0,
-        width: "100%",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        gap: 8,
-        pointerEvents: "none",
-      }}
-    >
-      <button
-        type="button"
-        onPointerDown={(e) => e.stopPropagation()}
-        onDoubleClick={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation()
-          run()
-        }}
-        style={{
-          pointerEvents: "auto",
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 6,
-          height: 30,
-          padding: "0 14px",
-          borderRadius: 9999,
-          border: "1px solid rgba(255,255,255,0.14)",
-          background: state === "done" ? "#0070f3" : "#000000",
-          color: "#ffffff",
-          fontFamily: "var(--font-sans)",
-          fontSize: 13,
-          fontWeight: 500,
-          cursor: anyRunning ? "default" : "pointer",
-          boxShadow: "none",
-          transition: "background 0.15s ease",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {state === "running" ? (
-          <>
-            <Loader2 className="animate-spin" size={14} />
-            Running
-          </>
-        ) : state === "done" ? (
-          <>
-            <Check size={14} />
-            Done
-          </>
-        ) : (
-          <>
-            <Play size={13} fill="currentColor" />
-            Run
-          </>
-        )}
-      </button>
-
-      {/* Reset control — clears the finished run so the workflow returns to its
-          pre-run shell state. Only shown once a run has started/completed. */}
-      {anyState && (
-        <button
-          type="button"
-          title="Reset workflow"
-          aria-label="Reset workflow"
-          onPointerDown={(e) => e.stopPropagation()}
-          onDoubleClick={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation()
-            if (anyRunning) return
-            clearRun()
-          }}
-          style={{
-            pointerEvents: "auto",
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: 30,
-            height: 30,
-            borderRadius: 9999,
-            border: "1px solid rgba(255,255,255,0.14)",
-            background: "#000000",
-            color: "#ffffff",
-            cursor: anyRunning ? "default" : "pointer",
-            opacity: anyRunning ? 0.5 : 1,
-            boxShadow: "none",
-          }}
-        >
-          <RotateCw size={14} />
-        </button>
-      )}
-    </div>
-  )
-}
-
 function renderContent(el: CanvasElement, b: { width: number; height: number }, phase: RunPhase | undefined) {
   switch (el.type) {
     case "rectangle":
@@ -838,6 +701,25 @@ function ShapeSvg({ el, b }: { el: CanvasElement; b: { width: number; height: nu
   const h = Math.max(1, b.height)
   const fill = el.fill === "transparent" ? "none" : el.fill
   const rx = el.rounded ? Math.min(16, Math.min(w, h) * 0.12) : 0
+  const sloppiness = el.sloppiness ?? 0
+  // A sketched shape replaces the crisp geometry below with hand-drawn paths.
+  const sketch = useMemo(
+    () =>
+      sloppiness === 0
+        ? null
+        : sketchShape({
+            id: el.id,
+            type: el.type as SketchShapeType,
+            width: w,
+            height: h,
+            radius: el.type === "rectangle" ? rx : 0,
+            sloppiness,
+            fill: el.fill,
+            stroke: noStroke ? "transparent" : el.stroke,
+            strokeWidth: sw,
+          }),
+    [sloppiness, el.id, el.type, el.fill, el.stroke, w, h, rx, sw, noStroke],
+  )
   // Stroke is drawn entirely outside the shape (Figma-style "outside" align):
   // a separate stroke-only path is outset by half the stroke width so its
   // own centered stroke band lands fully beyond the fill's edge, and the
@@ -845,7 +727,18 @@ function ShapeSvg({ el, b }: { el: CanvasElement; b: { width: number; height: nu
   const off = sw / 2
   return (
     <svg width="100%" height="100%" viewBox={`0 0 ${w} ${h}`} style={{ overflow: "visible", display: "block" }}>
-      {el.type === "rectangle" && (
+      {sketch?.map((p, i) => (
+        <path
+          key={i}
+          d={p.d}
+          fill={p.fill}
+          stroke={p.stroke}
+          strokeWidth={p.strokeWidth}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ))}
+      {!sketch && el.type === "rectangle" && (
         <>
           {sw > 0 && (
             <rect
@@ -863,7 +756,7 @@ function ShapeSvg({ el, b }: { el: CanvasElement; b: { width: number; height: nu
           <rect x={0} y={0} width={w} height={h} rx={rx} ry={rx} fill={fill} stroke="none" />
         </>
       )}
-      {el.type === "ellipse" && (
+      {!sketch && el.type === "ellipse" && (
         <>
           {sw > 0 && (
             <ellipse cx={w / 2} cy={h / 2} rx={w / 2 + off} ry={h / 2 + off} fill="none" stroke={strokeVal} strokeWidth={sw} />
@@ -871,7 +764,7 @@ function ShapeSvg({ el, b }: { el: CanvasElement; b: { width: number; height: nu
           <ellipse cx={w / 2} cy={h / 2} rx={w / 2} ry={h / 2} fill={fill} stroke="none" />
         </>
       )}
-      {el.type === "diamond" && (
+      {!sketch && el.type === "diamond" && (
         <>
           {sw > 0 && (
             <polygon
@@ -975,11 +868,20 @@ function TextView({ el }: { el: CanvasElement }) {
 
 function CardView({ el }: { el: CanvasElement }) {
   const noStroke = el.stroke === "transparent" || el.strokeWidth === 0
+  // Grow the card to fit its text (like code/terminal/server) so descriptions
+  // never clip — the element height converges to the measured content height.
+  const ref = useRef<HTMLDivElement>(null)
+  useFitHeight(el, ref)
+  // Show the body for cards with a description, and for brand-new empty cards
+  // (so the placeholder hint appears) — but not for title-only labeled nodes.
+  const showBody = !!el.text || !el.title
+  // Card titles honor a custom fontSize for visual hierarchy (default 18).
+  const titleSize = el.fontSize ?? CARD.titleSize
   return (
     <div
+      ref={ref}
       style={{
         width: "100%",
-        height: "100%",
         borderRadius: el.rounded ? 12 : 2,
         background: el.fill === "transparent" ? "#ffffff" : el.fill,
         // outline (not border) so the stroke draws outside the fill's box
@@ -987,18 +889,19 @@ function CardView({ el }: { el: CanvasElement }) {
         outline: noStroke ? "none" : `${el.strokeWidth}px solid ${el.stroke}`,
         outlineOffset: 0,
         boxShadow: "none",
-        overflow: "hidden",
         display: "flex",
         flexDirection: "column",
       }}
     >
       <div
         style={{
-          padding: "12px 16px 8px",
+          // Title-only cards (labeled flow/diagram nodes) get symmetric padding
+          // instead of leaving room for a body.
+          padding: showBody ? "12px 16px 8px" : "12px 16px",
           fontFamily: "var(--font-sans)",
           fontWeight: 600,
-          fontSize: 18,
-          lineHeight: "24px",
+          fontSize: titleSize,
+          lineHeight: 1.34,
           color: el.title ? "#000" : "#9ca3af",
           whiteSpace: "pre-wrap",
           wordBreak: "break-word",
@@ -1007,21 +910,22 @@ function CardView({ el }: { el: CanvasElement }) {
       >
         {el.title || "Card title"}
       </div>
-      <div
-        style={{
-          padding: "0 16px 14px",
-          fontFamily: "var(--font-sans)",
-          fontSize: 14,
-          lineHeight: 1.5,
-          color: el.text ? "#444" : "#9ca3af",
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-          overflowWrap: "anywhere",
-          flex: 1,
-        }}
-      >
-        {el.text || "Add a description..."}
-      </div>
+      {showBody && (
+        <div
+          style={{
+            padding: "0 16px 14px",
+            fontFamily: "var(--font-sans)",
+            fontSize: CARD.bodySize,
+            lineHeight: 1.5,
+            color: el.text ? "#444" : "#9ca3af",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            overflowWrap: "anywhere",
+          }}
+        >
+          {el.text || "Add a description..."}
+        </div>
+      )}
     </div>
   )
 }
@@ -1518,13 +1422,10 @@ function RackUnit({
 }
 
 function ServerView({ el, phase }: { el: CanvasElement; phase: RunPhase | undefined }) {
-  const api = useApiContext(el)
   const update = useWhiteboard((s) => s.update)
   const contentRef = useRef<HTMLDivElement>(null)
-  // If a code API route feeds into this server, mirror its method/endpoint and
-  // return its response body; otherwise fall back to the node's own config.
-  const method = api?.method || el.method || "GET"
-  const endpoint = api?.path || el.endpoint || "/api/hello"
+  const method = el.method || "GET"
+  const endpoint = el.endpoint || "/api/hello"
   const methodColor = METHOD_COLORS
   const status = phase === "running" ? "processing" : phase === "done" ? "done" : "idle"
   const live = status !== "idle"

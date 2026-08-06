@@ -241,8 +241,8 @@ export function ComponentLibrary() {
   }
 
   const useTemplate = (t: WorkflowTemplate) => {
-    const { elements, connections } = instantiateTemplate(t)
-    setPendingTemplate({ elements, connections })
+    const { elements } = instantiateTemplate(t)
+    setPendingTemplate({ elements })
     setOpen(false)
   }
 

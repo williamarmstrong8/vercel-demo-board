@@ -16,7 +16,6 @@ import { GRID_SIZE, SNAP_THRESHOLD, type CanvasElement } from "@/lib/whiteboard/
 import { CanvasElementView } from "./canvas-element"
 import { SelectionOverlay, type HandleId } from "./selection-overlay"
 import { ElementEditor } from "./element-editor"
-import { ConnectionCurves } from "./workflow-connections"
 
 type Gesture =
   | { mode: "idle" }
@@ -587,7 +586,7 @@ export function CanvasSurface() {
     if (e.button !== 0) return
 
     if (store.pendingTemplate) {
-      const { elements: templateElements, connections } = store.pendingTemplate
+      const { elements: templateElements } = store.pendingTemplate
       if (templateElements.length > 0) {
         const minX = Math.min(...templateElements.map((element) => element.x))
         const minY = Math.min(...templateElements.map((element) => element.y))
@@ -596,7 +595,7 @@ export function CanvasSurface() {
           x: element.x + world.x - minX,
           y: element.y + world.y - minY,
         }))
-        store.addTemplate(placed, connections)
+        store.addTemplate(placed)
         e.preventDefault()
       }
       return
@@ -787,7 +786,6 @@ export function CanvasSurface() {
           transformOrigin: "0 0",
         }}
       >
-        <ConnectionCurves />
         {elements.map((el) => (
           <CanvasElementView key={el.id} el={el} />
         ))}

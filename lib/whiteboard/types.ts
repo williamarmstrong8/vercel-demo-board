@@ -53,20 +53,11 @@ export interface AgentFile {
 
 export type CodeThemeId = "dark" | "light" | "monokai"
 
-// Node types that participate in workflows (can be connected & run in sequence).
-export const NODE_TYPES: ElementType[] = ["code", "terminal", "server"]
-export function isNodeType(t: ElementType): boolean {
-  return NODE_TYPES.includes(t)
-}
+// How hand-drawn a shape looks: 0 keeps the crisp geometric render, 1 and 2
+// sketch it with roughjs (mild / heavy).
+export type Sloppiness = 0 | 1 | 2
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE"
-
-// A directed workflow connection between two node elements.
-export interface Connection {
-  id: string
-  from: string
-  to: string
-}
 
 // Ephemeral run phase for a node during a workflow run (not persisted).
 export type RunPhase = "running" | "done"
@@ -85,6 +76,7 @@ export interface CanvasElement {
   strokeWidth: number
   opacity: number
   rounded: boolean
+  sloppiness?: Sloppiness
   // text / card
   text?: string
   fontSize?: number
@@ -97,9 +89,6 @@ export interface CanvasElement {
   // code / terminal block
   codeTheme?: CodeThemeId
   showRun?: boolean
-  // server node: when true (default) the node reflects the upstream API
-  // context; when false it keeps its own custom, static configuration.
-  smartConnect?: boolean
   // server node
   method?: HttpMethod
   endpoint?: string
@@ -167,7 +156,6 @@ export interface Project {
   createdAt: number
   updatedAt: number
   elements: CanvasElement[]
-  connections: Connection[]
   camera: Camera
 }
 
