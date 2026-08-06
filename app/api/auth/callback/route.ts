@@ -14,7 +14,15 @@ function finish(request: Request, error?: string) {
 export async function GET(request: Request) {
   const url = new URL(request.url)
   const authorizationError = url.searchParams.get("error")
-  if (authorizationError) return finish(request, authorizationError)
+  if (authorizationError) {
+    // Vercel explains parameter rejections in error_description. Dropping it
+    // makes its `invalid_request` indistinguishable from our own checks below.
+    console.error("Vercel OAuth authorization rejected", {
+      error: authorizationError,
+      description: url.searchParams.get("error_description"),
+    })
+    return finish(request, authorizationError)
+  }
 
   const code = url.searchParams.get("code")
   const state = url.searchParams.get("state")
@@ -24,7 +32,18 @@ export async function GET(request: Request) {
   const verifier = cookies.match(/(?:^|; )vercel_oauth_verifier=([^;]*)/)?.[1]
 
   if (!code || !state || !stateCookie || state !== stateCookie || !nonce || !verifier) {
-    return finish(request, "invalid_request")
+    // The usual cause is the 10-minute cookie window lapsing between clicking
+    // sign in and returning from consent, so name it separately from a
+    // rejection by Vercel. Values are secrets — log only what is present.
+    console.error("Vercel OAuth callback is missing its handshake state", {
+      code: Boolean(code),
+      state: Boolean(state),
+      stateCookie: Boolean(stateCookie),
+      stateMatches: state === stateCookie,
+      nonce: Boolean(nonce),
+      verifier: Boolean(verifier),
+    })
+    return finish(request, "handshake_expired")
   }
 
   const clientId = process.env.NEXT_PUBLIC_VERCEL_APP_CLIENT_ID
@@ -47,9 +66,12 @@ export async function GET(request: Request) {
     })
 
     if (!tokenResponse.ok) {
+      // The body carries the OAuth error / error_description that says which
+      // parameter the token endpoint objected to.
       console.error("Vercel OAuth token exchange failed", {
         status: tokenResponse.status,
         statusText: tokenResponse.statusText,
+        body: await tokenResponse.text().catch(() => ""),
       })
       return finish(request, "token_exchange_failed")
     }
