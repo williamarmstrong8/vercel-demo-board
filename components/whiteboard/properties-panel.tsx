@@ -46,6 +46,8 @@ const FILL_COLORS = [
 ]
 
 const NO_STROKE = "transparent"
+const DEFAULT_STROKE_WIDTH = 2
+const DEFAULT_STROKE_COLOR = "#171717"
 
 const STROKE_PRESET_SET = new Set(STROKE_COLORS.flat())
 const FILL_PRESET_SET = new Set(FILL_COLORS.flat())
@@ -377,6 +379,23 @@ export function PropertiesPanel() {
   const sloppinessVal = (common("sloppiness") as Sloppiness | undefined) ?? 0
   const roundedVal = common("rounded") as boolean | undefined
 
+  // Picking a real stroke color and having a non-zero stroke width are both
+  // required for a stroke to actually render (see canvas-element's `noStroke`
+  // check), so each control also nudges the other one on instead of leaving
+  // the user to set both before anything becomes visible.
+  const setStrokeColor = (color: string, withHistory: boolean) => {
+    const patch: Partial<CanvasElement> = { stroke: color }
+    if (hasStrokeWidth && strokeWidthVal === 0) patch.strokeWidth = DEFAULT_STROKE_WIDTH
+    if (withHistory) updateWithHistory(ids, patch)
+    else update(ids, patch)
+  }
+  const setStrokeWidth = (width: number, withHistory: boolean) => {
+    const patch: Partial<CanvasElement> = { strokeWidth: width }
+    if (width > 0 && (!currentStroke || currentStroke === NO_STROKE)) patch.stroke = DEFAULT_STROKE_COLOR
+    if (withHistory) updateWithHistory(ids, patch)
+    else update(ids, patch)
+  }
+
   return (
     <div className="pointer-events-auto flex max-h-full w-60 flex-col overflow-hidden rounded-xl border border-border bg-card">
       <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-4 py-3">
@@ -403,11 +422,11 @@ export function PropertiesPanel() {
               <NoStrokeSwatch active={currentStroke === NO_STROKE} onClick={() => updateWithHistory(ids, { stroke: NO_STROKE })} />
             )}
             {isCustomStroke && (
-              <CustomColorSwatch value={currentStroke!} onChange={(v) => update(ids, { stroke: v })} onStart={beginInteraction} />
+              <CustomColorSwatch value={currentStroke!} onChange={(v) => setStrokeColor(v, false)} onStart={beginInteraction} />
             )}
             <ColorInput
-              value={currentStroke && currentStroke.startsWith("#") ? currentStroke : "#171717"}
-              onChange={(v) => update(ids, { stroke: v })}
+              value={currentStroke && currentStroke.startsWith("#") ? currentStroke : DEFAULT_STROKE_COLOR}
+              onChange={(v) => setStrokeColor(v, false)}
               onStart={beginInteraction}
             />
           </div>
@@ -419,7 +438,7 @@ export function PropertiesPanel() {
               <div className="grid grid-cols-6 grid-flow-col grid-rows-3 gap-1.5">
                 {STROKE_COLORS.map((shades) =>
                   shades.map((c) => (
-                    <Swatch key={c} color={c} active={currentStroke === c} onClick={() => updateWithHistory(ids, { stroke: c })} />
+                    <Swatch key={c} color={c} active={currentStroke === c} onClick={() => setStrokeColor(c, true)} />
                   )),
                 )}
               </div>
@@ -469,7 +488,7 @@ export function PropertiesPanel() {
                 step={1}
                 value={strokeWidthVal}
                 onPointerDown={beginInteraction}
-                onChange={(e) => update(ids, { strokeWidth: Number(e.target.value) })}
+                onChange={(e) => setStrokeWidth(Number(e.target.value), false)}
                 className="wb-range"
               />
               <input
@@ -480,7 +499,7 @@ export function PropertiesPanel() {
                 onFocus={beginInteraction}
                 onChange={(e) => {
                   const n = Number(e.target.value)
-                  if (!Number.isNaN(n)) update(ids, { strokeWidth: Math.max(0, Math.min(12, Math.round(n))) })
+                  if (!Number.isNaN(n)) setStrokeWidth(Math.max(0, Math.min(12, Math.round(n))), false)
                 }}
                 className="h-6 w-9 shrink-0 rounded-md border border-border bg-background text-center text-[11px] tabular-nums outline-none focus:border-foreground/40"
               />

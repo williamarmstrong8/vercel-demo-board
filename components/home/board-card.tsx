@@ -29,6 +29,9 @@ export function BoardCard({ board }: { board: BoardSummary }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(board.name)
+  // Delete needs a second, distinct click before it does anything — this is
+  // the flag for "the next click on this same button is the real one".
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -38,6 +41,21 @@ export function BoardCard({ board }: { board: BoardSummary }) {
     document.addEventListener("mousedown", onClick)
     return () => document.removeEventListener("mousedown", onClick)
   }, [])
+
+  // Whatever closes the menu — clicking away, rename, publish/unpublish —
+  // also drops back out of the "confirm delete" state, so reopening the menu
+  // later never lands straight on the armed button.
+  useEffect(() => {
+    if (!menuOpen) setConfirmingDelete(false)
+  }, [menuOpen])
+
+  // A safety net for "opened the menu, got distracted": the armed state
+  // quietly disarms itself rather than sitting there indefinitely.
+  useEffect(() => {
+    if (!confirmingDelete) return
+    const timer = setTimeout(() => setConfirmingDelete(false), 4000)
+    return () => clearTimeout(timer)
+  }, [confirmingDelete])
 
   const open = () => router.push(`/board/${board.id}`)
 
@@ -64,6 +82,7 @@ export function BoardCard({ board }: { board: BoardSummary }) {
 
   const remove = () => {
     setMenuOpen(false)
+    setConfirmingDelete(false)
     startTransition(async () => {
       await deleteBoard(board.id)
       router.refresh()
@@ -171,13 +190,23 @@ export function BoardCard({ board }: { board: BoardSummary }) {
                     </>
                   )}
                 </button>
-                <button
-                  onClick={remove}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-destructive hover:bg-muted"
-                >
-                  <Trash2 className="size-3.5" />
-                  Delete
-                </button>
+                {confirmingDelete ? (
+                  <button
+                    onClick={remove}
+                    className="flex w-full items-center gap-2 bg-destructive px-3 py-1.5 text-sm font-medium text-white hover:bg-destructive/90"
+                  >
+                    <Trash2 className="size-3.5" />
+                    Confirm delete
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setConfirmingDelete(true)}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-destructive hover:bg-muted"
+                  >
+                    <Trash2 className="size-3.5" />
+                    Delete
+                  </button>
+                )}
               </div>
             )}
           </div>

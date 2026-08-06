@@ -3,6 +3,7 @@ import { listMyBoards, listSharedBoards } from "@/app/actions/boards"
 import { BoardCard } from "@/components/home/board-card"
 import { NewBoardButton } from "@/components/home/new-board-button"
 import { AiBoardBuilder } from "@/components/home/ai-board-builder"
+import { UserMenu } from "@/components/home/user-menu"
 import { VercelMark } from "@/components/vercel-mark"
 import { getCurrentUser } from "@/lib/auth"
 
@@ -25,13 +26,8 @@ export default async function HomePage() {
             <span className="text-sm font-semibold tracking-tight">Canvas</span>
           </div>
           <div className="flex items-center gap-3">
-            <div className="hidden leading-tight sm:block">
-              <div className="text-sm font-medium">{user.displayName}</div>
-              {user.email && user.email !== user.displayName && (
-                <div className="text-xs text-muted-foreground">{user.email}</div>
-              )}
-            </div>
             <NewBoardButton />
+            <UserMenu displayName={user.displayName} email={user.email} />
           </div>
         </div>
       </header>
