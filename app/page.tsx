@@ -12,6 +12,17 @@ function VercelMark({ className }: { className?: string }) {
   )
 }
 
+// Each of these is fixed somewhere different, so name the cause rather than
+// sending everyone back through the same failing button.
+const AUTH_ERRORS: Record<string, string> = {
+  invalid_scope: "This app is not allowed to request one of the sign in scopes.",
+  access_denied: "Sign in was cancelled.",
+  not_configured: "Sign in is not configured on this deployment.",
+  handshake_expired: "Sign in took too long. Please try again.",
+  token_exchange_failed: "Vercel rejected this app's credentials.",
+  missing_id_token: "Vercel did not return an identity token.",
+}
+
 export default async function HomePage({
   searchParams,
 }: {
@@ -29,9 +40,12 @@ export default async function HomePage({
           </div>
           {user ? (
             <div className="flex items-center gap-3">
-              <span className="hidden text-sm text-muted-foreground sm:inline">
-                {user.name ?? user.username ?? user.email}
-              </span>
+              <div className="hidden leading-tight sm:block">
+                <div className="text-sm font-medium">{user.displayName}</div>
+                {user.email && user.email !== user.displayName && (
+                  <div className="text-xs text-muted-foreground">{user.email}</div>
+                )}
+              </div>
               <form action="/api/auth/signout" method="post">
                 <button className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground" type="submit">
                   Sign out
@@ -56,7 +70,8 @@ export default async function HomePage({
       <div className="mx-auto max-w-6xl px-6 py-10">
         {params.auth_error && (
           <p className="mb-6 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-            Sign in did not complete. Please try again.
+            {AUTH_ERRORS[params.auth_error] ?? "Sign in did not complete. Please try again."}{" "}
+            <span className="text-destructive/70">({params.auth_error})</span>
           </p>
         )}
         {/* Hero */}

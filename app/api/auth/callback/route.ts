@@ -48,7 +48,13 @@ export async function GET(request: Request) {
 
   const clientId = process.env.NEXT_PUBLIC_VERCEL_APP_CLIENT_ID
   const clientSecret = process.env.VERCEL_APP_CLIENT_SECRET
-  if (!clientId || !clientSecret) return finish(request, "not_configured")
+  if (!clientId || !clientSecret) {
+    console.error("Vercel OAuth callback is missing credentials", {
+      hasClientId: Boolean(clientId),
+      hasClientSecret: Boolean(clientSecret),
+    })
+    return finish(request, "not_configured")
+  }
 
   const redirectUri = new URL("/api/auth/callback", request.url).toString()
   try {
@@ -67,11 +73,16 @@ export async function GET(request: Request) {
 
     if (!tokenResponse.ok) {
       // The body carries the OAuth error / error_description that says which
-      // parameter the token endpoint objected to.
+      // parameter the token endpoint objected to. `invalid_client` means the
+      // secret does not belong to this client ID; `invalid_grant` points at the
+      // redirect URI or verifier rather than the credentials.
       console.error("Vercel OAuth token exchange failed", {
         status: tokenResponse.status,
         statusText: tokenResponse.statusText,
         body: await tokenResponse.text().catch(() => ""),
+        clientId,
+        redirectUri,
+        clientSecretLength: clientSecret.length,
       })
       return finish(request, "token_exchange_failed")
     }
