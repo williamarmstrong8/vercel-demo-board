@@ -696,6 +696,17 @@ function diamondPoints(w: number, h: number, outset: number) {
   return `${cx},${cy - hh} ${cx + hw},${cy} ${cx},${cy + hh} ${cx - hw},${cy}`
 }
 
+// SVG stroke-dasharray for a stroke style, scaled to the stroke width so a
+// thicker stroke reads as one continuous dash pattern instead of a
+// fixed-pixel one that looks too fine (dashed) or merges solid (dotted).
+// Paired with a round linecap, a short dash reads as a dot rather than a tick
+// mark — the two styles are really the same mechanism at different ratios.
+function strokeDashArray(style: CanvasElement["strokeStyle"], strokeWidth: number): string | undefined {
+  if (style === "dashed") return `${Math.max(4, strokeWidth * 3)} ${Math.max(4, strokeWidth * 2.2)}`
+  if (style === "dotted") return `${Math.max(0.1, strokeWidth * 0.4)} ${Math.max(4, strokeWidth * 2.2)}`
+  return undefined
+}
+
 function ShapeSvg({ el, b }: { el: CanvasElement; b: { width: number; height: number } }) {
   const noStroke = el.stroke === "transparent" || el.strokeWidth === 0
   const strokeVal = noStroke ? "none" : el.stroke
@@ -728,6 +739,7 @@ function ShapeSvg({ el, b }: { el: CanvasElement; b: { width: number; height: nu
   // own centered stroke band lands fully beyond the fill's edge, and the
   // fill path itself is painted on top at the untouched full size.
   const off = sw / 2
+  const dash = strokeDashArray(el.strokeStyle, sw)
   return (
     <svg width="100%" height="100%" viewBox={`0 0 ${w} ${h}`} style={{ overflow: "visible", display: "block" }}>
       {sketch?.map((p, i) => (
@@ -739,6 +751,7 @@ function ShapeSvg({ el, b }: { el: CanvasElement; b: { width: number; height: nu
           strokeWidth={p.strokeWidth}
           strokeLinecap="round"
           strokeLinejoin="round"
+          strokeDasharray={p.stroke !== "none" ? dash : undefined}
         />
       ))}
       {!sketch && el.type === "rectangle" && (
@@ -754,6 +767,8 @@ function ShapeSvg({ el, b }: { el: CanvasElement; b: { width: number; height: nu
               fill="none"
               stroke={strokeVal}
               strokeWidth={sw}
+              strokeLinecap="round"
+              strokeDasharray={dash}
             />
           )}
           <rect x={0} y={0} width={w} height={h} rx={rx} ry={rx} fill={fill} stroke="none" />
@@ -762,7 +777,17 @@ function ShapeSvg({ el, b }: { el: CanvasElement; b: { width: number; height: nu
       {!sketch && el.type === "ellipse" && (
         <>
           {sw > 0 && (
-            <ellipse cx={w / 2} cy={h / 2} rx={w / 2 + off} ry={h / 2 + off} fill="none" stroke={strokeVal} strokeWidth={sw} />
+            <ellipse
+              cx={w / 2}
+              cy={h / 2}
+              rx={w / 2 + off}
+              ry={h / 2 + off}
+              fill="none"
+              stroke={strokeVal}
+              strokeWidth={sw}
+              strokeLinecap="round"
+              strokeDasharray={dash}
+            />
           )}
           <ellipse cx={w / 2} cy={h / 2} rx={w / 2} ry={h / 2} fill={fill} stroke="none" />
         </>
@@ -775,7 +800,9 @@ function ShapeSvg({ el, b }: { el: CanvasElement; b: { width: number; height: nu
               fill="none"
               stroke={strokeVal}
               strokeWidth={sw}
+              strokeLinecap="round"
               strokeLinejoin="round"
+              strokeDasharray={dash}
             />
           )}
           <polygon points={diamondPoints(w, h, 0)} fill={fill} stroke="none" />
@@ -831,6 +858,7 @@ function LineSvg({ el }: { el: CanvasElement }) {
         stroke={el.stroke}
         strokeWidth={el.strokeWidth}
         strokeLinecap="round"
+        strokeDasharray={strokeDashArray(el.strokeStyle, el.strokeWidth)}
         markerEnd={el.type === "arrow" ? `url(#${markerId})` : undefined}
       />
     </svg>
@@ -880,24 +908,79 @@ function CardView({ el }: { el: CanvasElement }) {
   const showBody = !!el.text || !el.title
   // Card titles honor a custom fontSize for visual hierarchy (default 18).
   const titleSize = el.fontSize ?? CARD.titleSize
+  const rx = el.rounded ? 12 : 2
+  const sloppiness = el.sloppiness ?? 0
+  const w = Math.max(1, el.width)
+  const h = Math.max(1, el.height)
+  // A sketched card swaps the crisp CSS background/outline below for hand-drawn
+  // roughjs paths in an absolutely-positioned SVG, same trick as ShapeSvg —
+  // the fill and border stay real content-sized, just wobbly.
+  const sketch = useMemo(
+    () =>
+      sloppiness === 0
+        ? null
+        : sketchShape({
+            id: el.id,
+            type: "rectangle",
+            width: w,
+            height: h,
+            radius: rx,
+            sloppiness,
+            fill: el.fill,
+            stroke: noStroke ? "transparent" : el.stroke,
+            strokeWidth: noStroke ? 0 : el.strokeWidth,
+          }),
+    [sloppiness, el.id, el.fill, el.stroke, w, h, rx, noStroke, el.strokeWidth],
+  )
+  const dash = strokeDashArray(el.strokeStyle, el.strokeWidth)
   return (
     <div
       ref={ref}
       style={{
+        position: "relative",
         width: "100%",
-        borderRadius: el.rounded ? 12 : 2,
-        background: el.fill === "transparent" ? "#ffffff" : el.fill,
+        borderRadius: rx,
+        background: sketch ? "transparent" : el.fill,
         // outline (not border) so the stroke draws outside the fill's box
         // instead of shrinking it — matches ShapeSvg's outside-stroke.
-        outline: noStroke ? "none" : `${el.strokeWidth}px solid ${el.stroke}`,
+        outline: sketch || noStroke ? "none" : `${el.strokeWidth}px ${el.strokeStyle ?? "solid"} ${el.stroke}`,
         outlineOffset: 0,
         boxShadow: "none",
         display: "flex",
         flexDirection: "column",
+        overflow: sketch ? "visible" : undefined,
       }}
     >
+      {sketch && (
+        <svg
+          width="100%"
+          height="100%"
+          viewBox={`0 0 ${w} ${h}`}
+          preserveAspectRatio="none"
+          style={{ position: "absolute", inset: 0, overflow: "visible", pointerEvents: "none" }}
+        >
+          {sketch.map((p, i) => (
+            <path
+              key={i}
+              d={p.d}
+              fill={p.fill}
+              stroke={p.stroke}
+              strokeWidth={p.strokeWidth}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray={p.stroke !== "none" ? dash : undefined}
+            />
+          ))}
+        </svg>
+      )}
       <div
         style={{
+          // position: relative puts this in the same "positioned" paint layer as
+          // the absolutely-positioned sketch SVG above — CSS paints positioned
+          // elements in DOM order regardless of static/absolute, so being later
+          // in the tree is what keeps the text on top of a sketched background,
+          // not z-index.
+          position: "relative",
           // Title-only cards (labeled flow/diagram nodes) get symmetric padding
           // instead of leaving room for a body.
           padding: showBody ? "12px 16px 8px" : "12px 16px",
@@ -916,6 +999,7 @@ function CardView({ el }: { el: CanvasElement }) {
       {showBody && (
         <div
           style={{
+            position: "relative",
             padding: "0 16px 14px",
             fontFamily: "var(--font-sans)",
             fontSize: CARD.bodySize,
@@ -1960,7 +2044,7 @@ function Ec2View({ el }: { el: CanvasElement }) {
   const overloaded = requests.length > 3
   return (
     <ComputeCardShell el={el}>
-    <div style={{ width: "100%", height: "100%", border: el.showContainerBorder === false ? "none" : `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
+    <div style={{ width: "100%", height: "100%", border: el.showContainerBorder === false ? "none" : "1px solid #2e2e2e", borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
       <header style={{ flexShrink: 0, minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Server</strong><span style={{ fontSize: 9.5, color: "#777" }}>Amazon EC2 · always on</span></div><span style={{ color: "#8b8b95", fontFamily: "var(--font-mono)", fontSize: 10 }}>Usage: <b style={{ color: "#ededed", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
       <div style={{ minHeight: 0, flex: 1, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
         {el.showServerTowers !== false && <div aria-label="Two provisioned server towers" style={{ display: "flex", gap: 8 }}>
@@ -2051,7 +2135,7 @@ function FluidComputeView({ el }: { el: CanvasElement }) {
   const anyActive = activeInstanceCount > 0
   return (
     <ComputeCardShell el={el}>
-    <div style={{ width: "100%", height: "100%", border: el.showContainerBorder === false ? "none" : `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
+    <div style={{ width: "100%", height: "100%", border: el.showContainerBorder === false ? "none" : "1px solid #2e2e2e", borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
       <header style={{ flexShrink: 0, minHeight: 66, padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Fluid</strong><span style={{ color: "#777", fontSize: 9.5 }}>Vercel Functions</span></div><span style={{ fontFamily: "var(--font-mono)", color: "#888", fontSize: 10 }}>Usage: <b style={{ color: "#ddd", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
       <div style={{ minHeight: 0, flex: 1, overflow: "hidden", padding: "12px 0", display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 12 }}>
         {/* No key here: each instance row below owns its own enter/exit fade
@@ -2130,7 +2214,7 @@ function ServerlessComputeView({ el }: { el: CanvasElement }) {
   const visibleTraces = traces.slice(-5)
   return (
     <ComputeCardShell el={el}>
-    <div style={{ width: "100%", height: "100%", border: el.showContainerBorder === false ? "none" : `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
+    <div style={{ width: "100%", height: "100%", border: el.showContainerBorder === false ? "none" : "1px solid #2e2e2e", borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
       <header style={{ flexShrink: 0, minHeight: 58, padding: "8px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #202020" }}><div style={{ display: "flex", flexDirection: "column", gap: 2 }}><strong style={{ fontSize: 15 }}>Serverless</strong><span style={{ color: "#777", fontSize: 9.5 }}>One request per instance</span></div><span style={{ fontFamily: "var(--font-mono)", color: "#888", fontSize: 10 }}>Usage: <b style={{ color: "#ddd", fontWeight: 500 }}>{usage.toFixed(1)}s</b></span></header>
       <div style={{ minHeight: 0, flex: 1, overflow: "hidden", padding: "8px 0", display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 7 }}>
         {/* See FluidComputeView: no key here so the stack persists across
@@ -2200,7 +2284,7 @@ function ComputeComparisonView({ el }: { el: CanvasElement }) {
     })
   }
   return (
-    <div style={{ width: "100%", height: "100%", border: el.showContainerBorder === false ? "none" : `1px solid ${computeToken.borderStrong}`, borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
+    <div style={{ width: "100%", height: "100%", border: el.showContainerBorder === false ? "none" : "1px solid #2e2e2e", borderRadius: el.rounded ? 12 : 2, background: "#050505", color: "#ededed", overflow: "hidden", display: "flex", flexDirection: "column", fontFamily: "var(--font-sans)" }}>
       <header onDoubleClick={(event) => event.stopPropagation()} style={{ pointerEvents: "auto", flexShrink: 0, minHeight: 58, padding: "11px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, borderBottom: "1px solid #202020", background: "#080808" }}>
         <div style={{ minWidth: 0, display: "flex", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
           {comparisonKinds.map((kind) => <label key={kind} onPointerDown={(event) => event.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 11.5, whiteSpace: "nowrap" }}><input type="checkbox" checked={enabled[kind]} onChange={toggle(kind)} style={{ width: 14, height: 14, accentColor: "#ededed" }} />{kind === "fluid" ? "Fluid" : kind === "serverless" ? "Serverless" : "Server"}</label>)}

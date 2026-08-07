@@ -3,6 +3,7 @@ import {
   REFRESH_COOKIE,
   SESSION_COOKIE,
   applySession,
+  devBypassEnabled,
   exchangeRefreshToken,
   sessionState,
 } from "@/lib/session"
@@ -33,6 +34,11 @@ export const config = {
 }
 
 export async function proxy(request: NextRequest) {
+  // DEV_BYPASS_AUTH=1 skips the gate entirely — see getCurrentUser() in
+  // lib/auth.ts, which hands back a fake identity so the rest of the app
+  // (board ownership included) works normally behind it.
+  if (devBypassEnabled()) return NextResponse.next()
+
   const idToken = request.cookies.get(SESSION_COOKIE)?.value
   const state = sessionState(idToken)
   if (state === "fresh") return NextResponse.next()

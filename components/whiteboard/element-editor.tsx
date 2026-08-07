@@ -12,7 +12,6 @@ export function ElementEditor({ id }: { id: string }) {
   )
   const update = useWhiteboard((s) => s.update)
   const setEditing = useWhiteboard((s) => s.setEditing)
-  const deleteEmpty = useRef(false)
   const settled = useRef(false)
 
   const textRef = useRef<HTMLTextAreaElement>(null)
@@ -78,21 +77,11 @@ export function ElementEditor({ id }: { id: string }) {
   if (!el) return null
   const b = getBounds(el)
 
-  const commit = () => {
-    setEditing(null)
-    if (el.type === "text" && !(el.text || "").trim()) {
-      // remove empty text element
-      const store = useWhiteboard.getState()
-      const els = (store.projects.find((p) => p.id === store.currentId) ?? store.projects[0]).elements.filter(
-        (e) => e.id !== id,
-      )
-      store.select([])
-      // write directly
-      useWhiteboard.setState((s) => ({
-        projects: s.projects.map((p) => (p.id === s.currentId ? { ...p, elements: els } : p)),
-      }))
-    }
-  }
+  // Deleting an empty text block lives in the store's setEditing itself (see
+  // store.ts) so every way of leaving edit mode — blurring this editor,
+  // Escape, clicking empty canvas, starting a new block — gets the same
+  // cleanup instead of only the path that happens to call commit().
+  const commit = () => setEditing(null)
 
   if (el.type === "text") {
     return (
@@ -231,7 +220,6 @@ export function ElementEditor({ id }: { id: string }) {
   }
 
   // card editor
-  void deleteEmpty
   return (
     <div
       onPointerDown={(e) => e.stopPropagation()}

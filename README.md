@@ -16,6 +16,10 @@
 
 The application uses OAuth 2.0 Authorization Code with PKCE, validates the returned OIDC ID token against Vercel's JWKS, and stores it in an HTTP-only session cookie. See the [Sign in with Vercel guide](https://vercel.com/docs/sign-in-with-vercel/getting-started).
 
+### Bypassing sign in locally
+
+Setting up a Sign in with Vercel app just to run the project on `localhost` is a lot of ceremony, so set `DEV_BYPASS_AUTH=1` in `.env.local` to skip it: `proxy.ts` lets every request through and `getCurrentUser()` returns a fixed fake identity (`dev-local-user`) instead of reading the session cookie. It only takes effect when `NODE_ENV !== "production"`, so it can't accidentally ship enabled. Boards created this way are owned by that fake user like any other account.
+
 ### Session length
 
 The session *is* the ID token, and Vercel issues those with a one-hour expiry. `offline_access` also gets a refresh token, which lasts 30 days and rotates every time it's used, so `proxy.ts` trades it for a new ID token once the current one is within ten minutes of expiring. The renewal happens inside the request that noticed, so nobody sees a redirect — in practice a session lasts 30 days, and longer than that if it's still being used when the refresh token rotates.

@@ -4,9 +4,60 @@ import { AGENT_STRUCTURES } from "./eve-templates"
 import { DEFAULT_GATEWAY_MODEL } from "./ai-gateway-models"
 import { DEFAULT_DB_ENGINE } from "./db-engines"
 
-// Default fill used for shapes (fill, no stroke by default)
-export const DEFAULT_SHAPE_FILL = "#e4e4e7"
 export const DEFAULT_STROKE = "#171717"
+const DEFAULT_STROKE_DARK = "#e5e5e5"
+
+// Tracks the board editor's current light/dark preference (see
+// components/site-theme.tsx) so freshly drawn shapes, lines and text default
+// to a stroke that's actually visible against the canvas — a near-black
+// default line is invisible on a dark canvas otherwise. This only changes
+// what NEW elements get; anything already drawn (or template/AI-authored
+// content, which always supplies its own explicit colors) keeps its stored
+// color regardless of theme.
+let elementTheme: "light" | "dark" = "light"
+
+export function setElementTheme(theme: "light" | "dark") {
+  elementTheme = theme
+}
+
+function defaultStroke() {
+  return elementTheme === "dark" ? DEFAULT_STROKE_DARK : DEFAULT_STROKE
+}
+
+// The set of drawable primitives whose look-and-feel is worth "remembering":
+// change a rectangle's stroke color and the next rectangle (or ellipse, or
+// diamond) you draw should start out looking the same, the way Figma/
+// Excalidraw carry a tool's last style forward across similar tools.
+// Specialized workflow blocks (server, database, code, …) intentionally keep
+// their own fixed dark-panel aesthetic instead.
+//
+// Shapes (rectangle/ellipse/diamond) share one memory bucket, connectors
+// (arrow/line) share another, and cards get their own — matching how a user
+// thinks about "shape style" vs "line style" vs "card style".
+type StyleMemoryGroup = "shape" | "connector" | "card"
+export type StyleOverride = Partial<
+  Pick<CanvasElement, "stroke" | "fill" | "strokeWidth" | "strokeStyle" | "sloppiness" | "rounded">
+>
+
+const STYLE_MEMORY_GROUPS: Partial<Record<CanvasElement["type"], StyleMemoryGroup>> = {
+  rectangle: "shape",
+  ellipse: "shape",
+  diamond: "shape",
+  arrow: "connector",
+  line: "connector",
+  card: "card",
+}
+const styleMemory: Partial<Record<StyleMemoryGroup, StyleOverride>> = {}
+
+// Called by the properties panel whenever the user changes stroke/fill/width/
+// line style/sloppiness/edges on a selected element, so the change sticks as
+// the default for the next element of that same group. In-memory only — it
+// resets on reload, same as factory.ts's other "current tool" state above.
+export function rememberElementStyle(type: CanvasElement["type"], patch: StyleOverride) {
+  const group = STYLE_MEMORY_GROUPS[type]
+  if (!group) return
+  styleMemory[group] = { ...styleMemory[group], ...patch }
+}
 
 export function createElement(
   tool: Tool,
@@ -31,18 +82,20 @@ export function createElement(
   }
 
   switch (tool) {
-    // Shapes: filled by default, no stroke
+    // Shapes: unfilled outline by default, with a bold-ish 3px stroke — unless
+    // the user's last edit to a shape set something else, in which case that
+    // wins (styleMemory spread last).
     case "rectangle":
-      return { ...base, type: "rectangle", fill: DEFAULT_SHAPE_FILL, stroke: "transparent", strokeWidth: 0 }
+      return { ...base, type: "rectangle", fill: "transparent", stroke: defaultStroke(), strokeWidth: 3, ...styleMemory.shape }
     case "ellipse":
-      return { ...base, type: "ellipse", fill: DEFAULT_SHAPE_FILL, stroke: "transparent", strokeWidth: 0 }
+      return { ...base, type: "ellipse", fill: "transparent", stroke: defaultStroke(), strokeWidth: 3, ...styleMemory.shape }
     case "diamond":
-      return { ...base, type: "diamond", fill: DEFAULT_SHAPE_FILL, stroke: "transparent", strokeWidth: 0 }
+      return { ...base, type: "diamond", fill: "transparent", stroke: defaultStroke(), strokeWidth: 3, ...styleMemory.shape }
     // Arrows: thicker default stroke
     case "arrow":
-      return { ...base, type: "arrow", fill: "transparent", stroke: DEFAULT_STROKE, strokeWidth: 3 }
+      return { ...base, type: "arrow", fill: "transparent", stroke: defaultStroke(), strokeWidth: 3, ...styleMemory.connector }
     case "line":
-      return { ...base, type: "line", fill: "transparent", stroke: DEFAULT_STROKE, strokeWidth: 3 }
+      return { ...base, type: "line", fill: "transparent", stroke: defaultStroke(), strokeWidth: 3, ...styleMemory.connector }
     case "text":
       return {
         ...base,
@@ -52,7 +105,7 @@ export function createElement(
         text: "",
         fontSize: 24,
         fill: "transparent",
-        stroke: DEFAULT_STROKE,
+        stroke: defaultStroke(),
       }
     case "card":
       return {
@@ -69,6 +122,7 @@ export function createElement(
         fill: "#ffffff",
         strokeWidth: 3,
         rounded: true,
+        ...styleMemory.card,
       }
     case "code":
       return {

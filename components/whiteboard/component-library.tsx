@@ -193,6 +193,7 @@ export function ComponentLibrary() {
   const inputRef = useRef<HTMLInputElement>(null)
   const setTool = useWhiteboard((s) => s.setTool)
   const setPendingTemplate = useWhiteboard((s) => s.setPendingTemplate)
+  const clearSelection = useWhiteboard((s) => s.clearSelection)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -327,7 +328,12 @@ export function ComponentLibrary() {
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          // Opening the library while an element's properties menu is open
+          // would otherwise leave both floating panels on screen at once.
+          clearSelection()
+          setOpen(true)
+        }}
         title="Components & templates"
         className="flex size-9 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-white/10 hover:text-white"
       >
@@ -348,8 +354,9 @@ export function ComponentLibrary() {
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
           />
 
-          {/* modal */}
-          <div className="relative z-10 flex max-h-[74vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
+          {/* modal — always dark, like the toolbar/top bar, regardless of the
+              board's light/dark setting (see SiteThemeProvider) */}
+          <div className="dark relative z-10 flex max-h-[74vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-card text-foreground shadow-2xl">
             {/* search */}
             <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
               <Search className="size-4 shrink-0 text-muted-foreground" />
