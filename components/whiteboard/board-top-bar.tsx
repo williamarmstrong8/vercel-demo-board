@@ -1,27 +1,52 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Eye } from "lucide-react"
+import { ArrowLeft, Copy, Eye, Star } from "lucide-react"
 import { useWhiteboard } from "@/lib/whiteboard/store"
+import { duplicateBoard, toggleBoardStar } from "@/app/actions/boards"
 
 export function BoardTopBar({
   canEdit = true,
   authorName = null,
+  initialStarCount = 0,
+  initiallyStarred = false,
 }: {
   canEdit?: boolean
   authorName?: string | null
+  initialStarCount?: number
+  initiallyStarred?: boolean
 }) {
   const current = useWhiteboard((s) => s.current())
   const renameProject = useWhiteboard((s) => s.renameProject)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(current.name)
+  const [duplicating, startDuplicate] = useTransition()
+  const [isStarred, setIsStarred] = useState(initiallyStarred)
+  const [starCount, setStarCount] = useState(initialStarCount)
   const router = useRouter()
 
   const commit = () => {
     setEditing(false)
     if (draft.trim()) renameProject(current.id, draft.trim())
     else setDraft(current.name)
+  }
+
+  // The whole point of duplicating a read-only board is to get an editable
+  // one, so this lands straight on the new copy rather than back on "/".
+  const duplicate = () => {
+    startDuplicate(async () => {
+      const id = await duplicateBoard(current.id)
+      router.push(`/board/${id}`)
+    })
+  }
+
+  const toggleStar = () => {
+    startDuplicate(async () => {
+      const starred = await toggleBoardStar(current.id)
+      setIsStarred(starred)
+      setStarCount((count) => count + (starred ? 1 : -1))
+    })
   }
 
   return (
@@ -83,6 +108,27 @@ export function BoardTopBar({
               </span>
             )}
           </span>
+
+          {/* Can't edit this one, but can always take a copy. */}
+          <button
+            onClick={duplicate}
+            disabled={duplicating}
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-neutral-900 transition-opacity hover:opacity-90 disabled:opacity-60"
+          >
+            <Copy className="size-3.5" />
+            {duplicating ? "Duplicating…" : "Duplicate"}
+          </button>
+          <button
+            onClick={toggleStar}
+            disabled={duplicating}
+            className={`flex shrink-0 items-center gap-1.5 rounded-lg bg-neutral-800 px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-60 ${
+              isStarred ? "text-amber-400" : "text-neutral-200 hover:text-white"
+            }`}
+            aria-label={isStarred ? "Remove star" : "Star this board"}
+          >
+            <Star className={`size-3.5 ${isStarred ? "fill-current" : ""}`} />
+            {starCount}
+          </button>
         </>
       )}
     </div>

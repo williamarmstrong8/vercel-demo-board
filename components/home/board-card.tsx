@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Globe, Lock, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
+import { Copy, Globe, Lock, MoreHorizontal, Pencil, Star, Trash2 } from "lucide-react"
 import {
   deleteBoard,
+  duplicateBoard,
   renameBoard,
   setBoardVisibility,
+  toggleBoardStar,
   type BoardSummary,
 } from "@/app/actions/boards"
 import { cn } from "@/lib/utils"
@@ -29,6 +31,8 @@ export function BoardCard({ board }: { board: BoardSummary }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(board.name)
+  const [isStarred, setIsStarred] = useState(board.isStarred)
+  const [starCount, setStarCount] = useState(board.starCount)
   // Delete needs a second, distinct click before it does anything — this is
   // the flag for "the next click on this same button is the real one".
   const [confirmingDelete, setConfirmingDelete] = useState(false)
@@ -85,6 +89,26 @@ export function BoardCard({ board }: { board: BoardSummary }) {
     setConfirmingDelete(false)
     startTransition(async () => {
       await deleteBoard(board.id)
+      router.refresh()
+    })
+  }
+
+  // Copies straight into a new board of your own, then jumps there — the
+  // point of duplicating is to start editing, not to admire the copy sitting
+  // back in the grid.
+  const duplicate = () => {
+    setMenuOpen(false)
+    startTransition(async () => {
+      const id = await duplicateBoard(board.id)
+      router.push(`/board/${id}`)
+    })
+  }
+
+  const toggleStar = () => {
+    startTransition(async () => {
+      const starred = await toggleBoardStar(board.id)
+      setIsStarred(starred)
+      setStarCount((count) => count + (starred ? 1 : -1))
       router.refresh()
     })
   }
@@ -150,9 +174,10 @@ export function BoardCard({ board }: { board: BoardSummary }) {
           </p>
         </div>
 
-        {/* Rename, publish and delete are the owner's alone, so someone else's
-            shared board gets no menu at all. */}
-        {board.isOwner && (
+        {/* Rename, publish and delete are the owner's alone. Someone else's
+            shared board only offers Duplicate — a one-click copy rather than a
+            menu, since it's the sole action available. */}
+        {board.isOwner ? (
           <div ref={menuRef} className="relative">
             <button
               onClick={() => setMenuOpen((o) => !o)}
@@ -173,6 +198,13 @@ export function BoardCard({ board }: { board: BoardSummary }) {
                 >
                   <Pencil className="size-3.5" />
                   Rename
+                </button>
+                <button
+                  onClick={duplicate}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted"
+                >
+                  <Copy className="size-3.5" />
+                  Duplicate
                 </button>
                 <button
                   onClick={toggleVisibility}
@@ -209,6 +241,31 @@ export function BoardCard({ board }: { board: BoardSummary }) {
                 )}
               </div>
             )}
+          </div>
+        ) : (
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              onClick={toggleStar}
+              disabled={pending}
+              className={cn(
+                "flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-60",
+                isStarred && "text-amber-500 hover:text-amber-500",
+              )}
+              aria-label={isStarred ? `Remove star from ${board.name}` : `Star ${board.name}`}
+              title={isStarred ? "Remove star" : "Star this board"}
+            >
+              <Star className={cn("size-3.5", isStarred && "fill-current")} />
+              <span>{starCount}</span>
+            </button>
+            <button
+              onClick={duplicate}
+              disabled={pending}
+              className="flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100 disabled:opacity-60"
+              aria-label={`Duplicate ${board.name}`}
+              title="Duplicate to your boards"
+            >
+              <Copy className="size-4" />
+            </button>
           </div>
         )}
       </div>

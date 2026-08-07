@@ -2073,13 +2073,13 @@ function AiGatewayView({ el }: { el: CanvasElement }) {
       <div style={{ padding: "14px 16px", ...mono, color: plain }}>
         <div>
           <span style={{ color: kw }}>import</span> {"{ "}
-          <span style={{ color: fn }}>generateText</span>
+          <span style={{ color: fn }}>streamText</span>
           {" }"} <span style={{ color: kw }}>from</span> <span style={{ color: str }}>{"'ai'"}</span>
         </div>
         <div style={{ height: 12 }} />
         <div>
-          <span style={{ color: kw }}>const</span> {"{ text } ="} <span style={{ color: kw }}>await</span>{" "}
-          <span style={{ color: fn }}>generateText</span>
+          <span style={{ color: kw }}>const</span> {"result ="}{" "}
+          <span style={{ color: fn }}>streamText</span>
           {"({"}
         </div>
 

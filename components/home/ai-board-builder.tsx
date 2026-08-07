@@ -2,22 +2,24 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Sparkles, X, ArrowUp, Loader2, SquareArrowOutUpRight, Plus, Check } from "lucide-react"
-import { GATEWAY_MODELS } from "@/lib/whiteboard/ai-gateway-models"
+import {
+  Sparkles,
+  X,
+  ArrowUp,
+  Loader2,
+  SquareArrowOutUpRight,
+  Plus,
+  Check,
+  RotateCcw,
+} from "lucide-react"
+import { FALLBACK_MODELS, pickDefaultModel, type BuilderModel } from "@/lib/ai/models"
+import {
+  BUILD_STREAM_CONTENT_TYPE,
+  type BuildEvent,
+  type BuildStepStatus,
+  type BuiltBoard,
+} from "@/lib/ai/build-events"
 import { cn } from "@/lib/utils"
-
-interface BuilderModel {
-  id: string
-  name: string
-  provider: string
-}
-
-interface BuiltBoard {
-  id: string
-  name: string
-  blocks: number
-  url: string
-}
 
 interface ChatMessage {
   role: "user" | "assistant"
@@ -29,6 +31,19 @@ interface ChatMessage {
   // signed in until the next hard navigation. Surface a real way out instead
   // of a dead-end error bubble.
   needsSignIn?: boolean
+  // Sources attached to a user turn, shown with the message so it's clear what
+  // the build actually read.
+  sources?: Source[]
+  // Prompt to re-send when a turn fails for a reason worth another attempt.
+  retry?: string
+  // Steps this turn ran through, kept in the transcript once it finishes.
+  steps?: BuildStep[]
+}
+
+interface BuildStep {
+  id: string
+  label: string
+  status: BuildStepStatus
 }
 
 // A page/document the AI should read while building. Notion for now.
@@ -100,29 +115,11 @@ function notionPageLabel(url: string): string {
   }
 }
 
-// Fallback so the picker is never empty if the Gateway catalog can't be reached.
-const FALLBACK_MODELS: BuilderModel[] = GATEWAY_MODELS.map((m) => ({
-  id: m.id,
-  name: m.label,
-  provider: m.provider,
-}))
-
-// Preferred default, matched loosely against whatever the Gateway returns.
-const PREFERRED_DEFAULTS = ["anthropic/claude-sonnet", "openai/gpt-5", "openai/gpt", "google/gemini"]
-
 const EXAMPLE_PROMPTS = [
   "A three-tier web app: client, API server, and Postgres database",
   "The request flow for an AI chatbot using the Vercel AI Gateway",
   "A CI/CD pipeline from git push to production deploy",
 ]
-
-function pickDefaultModel(models: BuilderModel[]): string {
-  for (const pref of PREFERRED_DEFAULTS) {
-    const hit = models.find((m) => m.id.startsWith(pref))
-    if (hit) return hit.id
-  }
-  return models[0]?.id ?? ""
-}
 
 export function AiBoardBuilder() {
   const [open, setOpen] = useState(false)
@@ -152,6 +149,10 @@ function BuilderModal({ onClose }: { onClose: () => void }) {
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
   const [boardId, setBoardId] = useState<string | null>(null)
+
+  // Live progress for the turn currently running.
+  const [steps, setSteps] = useState<BuildStep[]>([])
+  const [streamedText, setStreamedText] = useState("")
 
   const [sources, setSources] = useState<Source[]>([])
   const [sourcesOpen, setSourcesOpen] = useState(false)
@@ -217,7 +218,7 @@ function BuilderModal({ onClose }: { onClose: () => void }) {
   // Keep the transcript pinned to the latest message.
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })
-  }, [messages, loading])
+  }, [messages, steps, streamedText, loading])
 
   function openAuthPopup(url: string) {
     window.open(url, "vercel-connect-notion", "width=520,height=720,menubar=no,toolbar=no")
@@ -245,14 +246,45 @@ function BuilderModal({ onClose }: { onClose: () => void }) {
     setSourcesOpen(false)
   }
 
-  async function send(text: string) {
+  async function send(text: string, opts: { resend?: boolean } = {}) {
     const trimmed = text.trim()
     if (!trimmed || loading) return
 
-    const nextMessages: ChatMessage[] = [...messages, { role: "user", content: trimmed }]
-    setMessages(nextMessages)
+    // A retry re-runs the last user turn, so drop the failed reply instead of
+    // repeating the prompt in the transcript.
+    const history = [...messages]
+    if (opts.resend) {
+      while (history.length > 0 && history[history.length - 1].role === "assistant") history.pop()
+    } else {
+      history.push({
+        role: "user",
+        content: trimmed,
+        sources: sources.length > 0 ? [...sources] : undefined,
+      })
+    }
+
+    setMessages(history)
     setInput("")
+    setSteps([])
+    setStreamedText("")
     setLoading(true)
+
+    // Progress accumulates here as well as in state: the final transcript entry
+    // keeps the step list, and state updates are too batched to read back from.
+    const turnSteps: BuildStep[] = []
+    const applyStep = (next: BuildStep) => {
+      const i = turnSteps.findIndex((s) => s.id === next.id)
+      if (i === -1) turnSteps.push(next)
+      else turnSteps[i] = next
+      setSteps([...turnSteps])
+    }
+
+    const finish = (message: Omit<ChatMessage, "role">) => {
+      setMessages((m) => [...m, { role: "assistant", steps: [...turnSteps], ...message }])
+    }
+
+    let reply = ""
+    let settled = false
 
     try {
       const res = await fetch("/api/ai/build-board", {
@@ -263,55 +295,111 @@ function BuilderModal({ onClose }: { onClose: () => void }) {
           boardId,
           sources,
           userId: userIdRef.current,
-          messages: nextMessages.map(({ role, content }) => ({ role, content })),
+          messages: history.map(({ role, content }) => ({ role, content })),
         }),
       })
-      const data = await res.json()
 
-      if (data.needsAuth === "notion") {
-        if (data.authorizeUrl) openAuthPopup(data.authorizeUrl)
-        setMessages((m) => [
-          ...m,
-          {
-            role: "assistant",
-            content:
-              "Connect your Notion account in the popup that just opened, then send your message again to build from those pages.",
-            error: true,
-          },
-        ])
-      } else if (res.status === 401) {
-        setMessages((m) => [
-          ...m,
-          {
-            role: "assistant",
+      // Request-level rejections (bad input, expired session) answer with plain
+      // JSON before the stream ever starts.
+      const contentType = res.headers.get("content-type") ?? ""
+      if (!contentType.includes(BUILD_STREAM_CONTENT_TYPE)) {
+        const data = await res.json().catch(() => ({}) as { error?: string })
+        settled = true
+        if (res.status === 401) {
+          finish({
             content: "Your session expired. Sign in again to keep building.",
             error: true,
             needsSignIn: true,
-          },
-        ])
-      } else if (!res.ok || data.error) {
-        setMessages((m) => [
-          ...m,
-          {
-            role: "assistant",
+          })
+        } else {
+          finish({
             content: data.error || "Something went wrong building the board. Please try again.",
             error: true,
-          },
-        ])
-      } else {
-        if (data.board?.id) setBoardId(data.board.id)
-        setMessages((m) => [
-          ...m,
-          { role: "assistant", content: data.reply, board: data.board ?? undefined },
-        ])
+            retry: trimmed,
+          })
+        }
+        return
       }
-    } catch {
-      setMessages((m) => [
-        ...m,
-        { role: "assistant", content: "Network error — please try again.", error: true },
-      ])
+
+      if (!res.body) throw new Error("The server sent an empty response.")
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
+
+      const handle = (event: BuildEvent) => {
+        switch (event.type) {
+          case "step":
+            applyStep({ id: event.id, label: event.label, status: event.status })
+            break
+          case "text":
+            reply += event.delta
+            setStreamedText(reply)
+            break
+          case "needs-auth":
+            if (event.authorizeUrl) openAuthPopup(event.authorizeUrl)
+            settled = true
+            finish({
+              content:
+                "Connect your Notion account in the popup that just opened, then send your message again to build from those pages.",
+              error: true,
+              retry: trimmed,
+            })
+            break
+          case "error":
+            settled = true
+            finish({ content: event.message, error: true, retry: trimmed })
+            break
+          case "done":
+            settled = true
+            if (event.board?.id) setBoardId(event.board.id)
+            finish({ content: event.reply, board: event.board ?? undefined })
+            break
+        }
+      }
+
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        let newline: number
+        while ((newline = buffer.indexOf("\n")) !== -1) {
+          const line = buffer.slice(0, newline).trim()
+          buffer = buffer.slice(newline + 1)
+          if (!line) continue
+          try {
+            handle(JSON.parse(line) as BuildEvent)
+          } catch {
+            // A partial or malformed line isn't worth failing the whole turn.
+          }
+        }
+      }
+
+      // The stream ended without a terminal event, so the connection was cut
+      // rather than the build finishing.
+      if (!settled) {
+        settled = true
+        finish({
+          content: reply
+            ? `${reply}\n\nThe connection dropped before the build finished.`
+            : "The connection dropped before the build finished. Your board may be incomplete.",
+          error: true,
+          retry: trimmed,
+        })
+      }
+    } catch (err) {
+      if (!settled) {
+        const detail = err instanceof Error ? err.message : ""
+        finish({
+          content: `Couldn't reach the build service${detail ? ` (${detail})` : ""}. Check your connection and try again.`,
+          error: true,
+          retry: trimmed,
+        })
+      }
     } finally {
       setLoading(false)
+      setSteps([])
+      setStreamedText("")
       inputRef.current?.focus()
     }
   }
@@ -378,53 +466,78 @@ function BuilderModal({ onClose }: { onClose: () => void }) {
             <EmptyState onPick={(p) => send(p)} disabled={loading} />
           ) : (
             messages.map((m, i) => (
-              <MessageRow key={i} message={m} onOpen={(url) => router.push(url)} />
+              <MessageRow
+                key={i}
+                message={m}
+                onOpen={(url) => router.push(url)}
+                onRetry={(prompt) => send(prompt, { resend: true })}
+                retryDisabled={loading}
+              />
             ))
           )}
-          {loading && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" />
-              Building…
-            </div>
-          )}
+          {loading && <BuildProgress steps={steps} text={streamedText} />}
         </div>
 
-        {/* Composer */}
+        {/* Composer — attached sources sit inside the input, above the text, so
+            it's clear they're being sent along with the prompt. */}
         <div className="border-t border-border p-3">
-          {/* Attached source chips */}
-          {sources.length > 0 && (
-            <div className="mb-2 flex flex-wrap gap-1.5">
-              {sources.map((s) => (
-                <span
-                  key={s.url}
-                  className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-border bg-card py-1 pl-2 pr-1 text-xs text-foreground"
-                >
-                  <NotionMark className="size-3.5 shrink-0 text-muted-foreground" />
-                  <span className="truncate">{notionPageLabel(s.url)}</span>
-                  <button
-                    type="button"
-                    aria-label="Remove source"
-                    onClick={() => setSources((cur) => cur.filter((x) => x.url !== s.url))}
-                    className="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  >
-                    <X className="size-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
+          <div className="relative flex flex-col gap-2 rounded-xl border border-border bg-background px-2 py-2 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30">
+            {sources.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pl-0.5 pt-0.5">
+                {sources.map((s) => (
+                  <SourceChip
+                    key={s.url}
+                    source={s}
+                    onRemove={() => setSources((cur) => cur.filter((x) => x.url !== s.url))}
+                  />
+                ))}
+              </div>
+            )}
 
-          <div className="relative flex items-end gap-2 rounded-xl border border-border bg-background px-2 py-2 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30">
-            {/* Add-source ("+") button */}
-            <button
-              type="button"
-              onClick={() => setSourcesOpen((v) => !v)}
-              aria-label="Add a source"
-              aria-expanded={sourcesOpen}
-              className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground"
-            >
-              <Plus className="size-4" />
-            </button>
+            <div className="flex items-end gap-2">
+              {/* Add-source ("+") button */}
+              <button
+                type="button"
+                onClick={() => setSourcesOpen((v) => !v)}
+                aria-label="Add a source"
+                aria-expanded={sourcesOpen}
+                className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground"
+              >
+                <Plus className="size-4" />
+              </button>
+
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault()
+                    send(input)
+                  }
+                }}
+                rows={1}
+                placeholder={
+                  boardId
+                    ? "Ask for changes or more blocks…"
+                    : "Describe the board you want to build…"
+                }
+                className="max-h-32 min-h-[1.5rem] flex-1 resize-none bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+              />
+              <button
+                type="button"
+                onClick={() => send(input)}
+                disabled={loading || !input.trim()}
+                aria-label="Send"
+                className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+              >
+                {loading ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <ArrowUp className="size-4" />
+                )}
+              </button>
+            </div>
 
             {sourcesOpen && (
               <SourcesPopover
@@ -436,35 +549,92 @@ function BuilderModal({ onClose }: { onClose: () => void }) {
                 onClose={() => setSourcesOpen(false)}
               />
             )}
-
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault()
-                  send(input)
-                }
-              }}
-              rows={1}
-              placeholder={
-                boardId ? "Ask for changes or more blocks…" : "Describe the board you want to build…"
-              }
-              className="max-h-32 min-h-[1.5rem] flex-1 resize-none bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
-            />
-            <button
-              type="button"
-              onClick={() => send(input)}
-              disabled={loading || !input.trim()}
-              aria-label="Send"
-              className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
-            >
-              {loading ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}
-            </button>
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function SourceChip({ source, onRemove }: { source: Source; onRemove?: () => void }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex max-w-full items-center gap-1.5 rounded-lg border border-border bg-card py-1 pl-2 text-xs text-foreground",
+        onRemove ? "pr-1" : "pr-2",
+      )}
+    >
+      <NotionMark className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="truncate">{notionPageLabel(source.url)}</span>
+      {onRemove && (
+        <button
+          type="button"
+          aria-label="Remove source"
+          onClick={onRemove}
+          className="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <X className="size-3" />
+        </button>
+      )}
+    </span>
+  )
+}
+
+function StepIcon({ status }: { status: BuildStepStatus }) {
+  if (status === "active") return <Loader2 className="size-3.5 animate-spin text-foreground" />
+  if (status === "error") return <X className="size-3.5 text-destructive" />
+  return <Check className="size-3.5 text-muted-foreground" />
+}
+
+function StepList({ steps, muted }: { steps: BuildStep[]; muted?: boolean }) {
+  if (steps.length === 0) return null
+  return (
+    <ol
+      className={cn(
+        "space-y-1.5 rounded-xl border border-border px-3 py-2.5",
+        muted ? "bg-transparent" : "bg-card",
+      )}
+    >
+      {steps.map((s) => (
+        <li key={s.id} className="flex items-start gap-2 text-xs leading-relaxed">
+          <span className="mt-0.5 flex size-3.5 shrink-0 items-center justify-center">
+            <StepIcon status={s.status} />
+          </span>
+          <span
+            className={cn(
+              "min-w-0 break-words",
+              s.status === "error"
+                ? "text-destructive"
+                : s.status === "active" && !muted
+                  ? "text-foreground"
+                  : "text-muted-foreground",
+            )}
+          >
+            {s.label}
+          </span>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+/** Live narration of the turn in flight: what's running, and the reply forming. */
+function BuildProgress({ steps, text }: { steps: BuildStep[]; text: string }) {
+  return (
+    <div className="flex flex-col gap-2">
+      {steps.length === 0 ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" />
+          Starting the build…
+        </div>
+      ) : (
+        <StepList steps={steps} />
+      )}
+      {text && (
+        <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-muted px-3.5 py-2 text-sm text-foreground">
+          {text}
+        </div>
+      )}
     </div>
   )
 }
@@ -581,13 +751,24 @@ function EmptyState({
 function MessageRow({
   message,
   onOpen,
+  onRetry,
+  retryDisabled,
 }: {
   message: ChatMessage
   onOpen: (url: string) => void
+  onRetry: (prompt: string) => void
+  retryDisabled: boolean
 }) {
   if (message.role === "user") {
     return (
-      <div className="flex justify-end">
+      <div className="flex flex-col items-end gap-1.5">
+        {message.sources && message.sources.length > 0 && (
+          <div className="flex max-w-[85%] flex-wrap justify-end gap-1.5">
+            {message.sources.map((s) => (
+              <SourceChip key={s.url} source={s} />
+            ))}
+          </div>
+        )}
         <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-primary px-3.5 py-2 text-sm text-primary-foreground">
           {message.content}
         </div>
@@ -597,6 +778,7 @@ function MessageRow({
 
   return (
     <div className="flex flex-col gap-2">
+      {message.steps && message.steps.length > 0 && <StepList steps={message.steps} muted />}
       <div
         className={cn(
           "max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-sm px-3.5 py-2 text-sm",
@@ -615,6 +797,17 @@ function MessageRow({
           className="self-start rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
         >
           Sign in
+        </button>
+      )}
+      {message.retry && (
+        <button
+          type="button"
+          disabled={retryDisabled}
+          onClick={() => onRetry(message.retry!)}
+          className="inline-flex self-start items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-40"
+        >
+          <RotateCcw className="size-3.5" />
+          Try again
         </button>
       )}
       {message.board && (

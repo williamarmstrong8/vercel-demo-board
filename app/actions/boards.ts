@@ -30,6 +30,14 @@ export async function createBoardFromData(name: string, data: BoardData): Promis
   return boards.createBoardFromData(name, data)
 }
 
+export async function duplicateBoard(id: string): Promise<string> {
+  return boards.duplicateBoard(id)
+}
+
+export async function toggleBoardStar(id: string): Promise<boolean> {
+  return boards.toggleBoardStar(id)
+}
+
 export async function saveBoard(
   id: string,
   patch: { name?: string; data?: BoardData },

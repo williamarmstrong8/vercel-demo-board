@@ -242,7 +242,12 @@ export function BoardEditor({
       {/* Top-left: back / board name */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between p-3">
         <div className="pointer-events-auto flex items-center gap-2">
-          <BoardTopBar canEdit={canEdit} authorName={board?.authorName ?? null} />
+          <BoardTopBar
+            canEdit={canEdit}
+            authorName={board?.authorName ?? null}
+            initialStarCount={board?.starCount ?? 0}
+            initiallyStarred={board?.isStarred ?? false}
+          />
         </div>
       </div>
 

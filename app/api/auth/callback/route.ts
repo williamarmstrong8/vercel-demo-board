@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
-import { SESSION_COOKIE, verifyIdToken } from "@/lib/auth"
-import { RETURN_TO_COOKIE, safeReturnTo } from "@/lib/session"
+import { verifyIdToken } from "@/lib/auth"
+import { RETURN_TO_COOKIE, applySession, deleteCookie, safeReturnTo } from "@/lib/session"
 
 const OAUTH_COOKIE_NAMES = [
   "vercel_oauth_state",
@@ -16,7 +16,7 @@ function finish(request: Request, error?: string, returnTo?: string | null) {
   const url = new URL(error ? "/signin" : (returnTo ?? "/"), request.url)
   if (error) url.searchParams.set("auth_error", error)
   const response = NextResponse.redirect(url)
-  OAUTH_COOKIE_NAMES.forEach((name) => response.cookies.delete(name))
+  OAUTH_COOKIE_NAMES.forEach((name) => deleteCookie(response, name))
   return response
 }
 
@@ -99,20 +99,27 @@ export async function GET(request: Request) {
       return finish(request, "token_exchange_failed")
     }
 
-    const tokens = (await tokenResponse.json()) as { id_token?: string }
+    const tokens = (await tokenResponse.json()) as { id_token?: string; refresh_token?: string }
     if (!tokens.id_token) {
       console.error("Vercel OAuth response did not include an ID token")
       return finish(request, "missing_id_token")
     }
 
-    const payload = await verifyIdToken(tokens.id_token, nonce)
+    // Vercel only issues a refresh token when `offline_access` is both requested
+    // here and enabled under Manage → Permissions. Without one the session can't
+    // be renewed and quietly reverts to lasting an hour, which is hard to notice
+    // from the outside, so say so rather than letting it look like a bug later.
+    if (!tokens.refresh_token) {
+      console.warn(
+        "Vercel OAuth response included no refresh token — sessions will expire with the ID token. Enable the offline_access scope to keep users signed in.",
+      )
+    }
+
+    await verifyIdToken(tokens.id_token, nonce)
     const response = finish(request, undefined, returnTo)
-    response.cookies.set(SESSION_COOKIE, tokens.id_token, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      expires: payload.exp ? new Date(payload.exp * 1000) : undefined,
+    applySession(response, {
+      idToken: tokens.id_token,
+      refreshToken: tokens.refresh_token ?? null,
     })
     return response
   } catch (error) {

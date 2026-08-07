@@ -1,8 +1,8 @@
 import { db } from "@/lib/db"
-import { boards, type BoardData, type BoardRow } from "@/lib/db/schema"
+import { boards, boardStars, type BoardData, type BoardRow } from "@/lib/db/schema"
 import { writeBoardData, BoardWriteDeniedError } from "@/lib/db/board-writes"
 import { getCurrentUser, requireUser } from "@/lib/auth"
-import { and, eq, ne, desc } from "drizzle-orm"
+import { and, eq, ne, desc, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 
 // Board persistence, shared by the Server Actions in app/actions/boards.ts (the
@@ -42,13 +42,19 @@ export interface BoardSummary {
   authorName: string | null
   description: string | null
   updatedAt: string
+  starCount: number
+  isStarred: boolean
   // Whether the viewer this summary was loaded for owns the board. Drives both
   // the UI (edit affordances) and the editor's read-only mode; the server
   // re-checks on every write regardless.
   isOwner: boolean
 }
 
-function toSummary(row: BoardRow, viewerId: string | null): BoardSummary {
+function toSummary(
+  row: BoardRow,
+  viewerId: string | null,
+  stars: { count: number; isStarred: boolean } = { count: 0, isStarred: false },
+): BoardSummary {
   return {
     id: row.id,
     name: row.name,
@@ -57,8 +63,29 @@ function toSummary(row: BoardRow, viewerId: string | null): BoardSummary {
     authorName: row.authorName,
     description: row.description,
     updatedAt: row.updatedAt.toISOString(),
+    starCount: stars.count,
+    isStarred: stars.isStarred,
     isOwner: viewerId !== null && row.ownerId === viewerId,
   }
+}
+
+async function starSummaries(rows: BoardRow[], viewerId: string | null): Promise<BoardSummary[]> {
+  if (rows.length === 0) return []
+
+  const starRows = await db
+    .select({ boardId: boardStars.boardId, userId: boardStars.userId })
+    .from(boardStars)
+    .where(inArray(boardStars.boardId, rows.map((row) => row.id)))
+
+  const starsByBoard = new Map<string, { count: number; isStarred: boolean }>()
+  for (const star of starRows) {
+    const current = starsByBoard.get(star.boardId) ?? { count: 0, isStarred: false }
+    current.count += 1
+    current.isStarred ||= star.userId === viewerId
+    starsByBoard.set(star.boardId, current)
+  }
+
+  return rows.map((row) => toSummary(row, viewerId, starsByBoard.get(row.id)))
 }
 
 // The signed-in user's own boards, private and public alike. Signed-out
@@ -73,7 +100,7 @@ export async function listMyBoards(): Promise<BoardSummary[]> {
     .where(eq(boards.ownerId, user.id))
     .orderBy(desc(boards.updatedAt))
 
-  return rows.map((row) => toSummary(row, user.id))
+  return starSummaries(rows, user.id)
 }
 
 // Boards other people have published. The viewer's own public boards are
@@ -86,8 +113,14 @@ export async function listSharedBoards(): Promise<BoardSummary[]> {
     ? and(eq(boards.isPublic, true), ne(boards.ownerId, user.id))
     : eq(boards.isPublic, true)
 
-  const rows = await db.select().from(boards).where(visible).orderBy(desc(boards.updatedAt))
-  return rows.map((row) => toSummary(row, user?.id ?? null))
+  const rows = await db.select().from(boards).where(visible)
+  const summaries = await starSummaries(rows, user?.id ?? null)
+  // Shared boards are ranked by community interest; recently edited boards
+  // break ties so a zero-star board isn't stranded below equally popular stale ones.
+  return summaries.sort(
+    (a, b) =>
+      b.starCount - a.starCount || new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  )
 }
 
 export async function getBoard(id: string): Promise<BoardSummary | null> {
@@ -98,7 +131,8 @@ export async function getBoard(id: string): Promise<BoardSummary | null> {
   const isOwner = user !== null && row.ownerId === user.id
   if (!isOwner && !row.isPublic) return null
 
-  return toSummary(row, user?.id ?? null)
+  const [summary] = await starSummaries([row], user?.id ?? null)
+  return summary
 }
 
 export async function createBoard(name?: string): Promise<string> {
@@ -124,6 +158,47 @@ export async function createBoardFromData(name: string, data: BoardData): Promis
 
   revalidatePath("/")
   return id
+}
+
+// Copy someone else's board — or your own — into a brand-new board you own.
+// Uses getBoard for the read, so the same owner-or-public rule that governs
+// viewing a board also governs what can be duplicated from it; there is no
+// separate "can duplicate" permission. The copy is a fresh row (new id, new
+// owner, starts private) with its own deep-cloned data, so editing it never
+// touches the original and the two boards' element ids can drift independently.
+export async function duplicateBoard(id: string): Promise<string> {
+  const source = await getBoard(id)
+  if (!source) throw new BoardWriteDeniedError()
+
+  const data: BoardData = structuredClone(source.data)
+  return createBoardFromData(`${source.name} (copy)`, data)
+}
+
+// Stars are intentionally separate from board writes: a public board is still
+// read-only, yet its viewers can endorse it. Owners cannot star their own board
+// and a board that turns private immediately stops accepting new stars.
+export async function toggleBoardStar(id: string): Promise<boolean> {
+  const user = await requireUser()
+  const [board] = await db.select().from(boards).where(eq(boards.id, id)).limit(1)
+  if (!board || !board.isPublic || board.ownerId === user.id) throw new BoardWriteDeniedError()
+
+  const [existing] = await db
+    .select({ boardId: boardStars.boardId })
+    .from(boardStars)
+    .where(and(eq(boardStars.boardId, id), eq(boardStars.userId, user.id)))
+    .limit(1)
+
+  if (existing) {
+    await db
+      .delete(boardStars)
+      .where(and(eq(boardStars.boardId, id), eq(boardStars.userId, user.id)))
+    revalidatePath("/")
+    return false
+  }
+
+  await db.insert(boardStars).values({ boardId: id, userId: user.id })
+  revalidatePath("/")
+  return true
 }
 
 // Persist canvas changes. Debounced client-side to a single write path (see

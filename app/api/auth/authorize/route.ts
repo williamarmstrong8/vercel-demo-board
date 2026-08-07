@@ -22,7 +22,11 @@ function codeChallenge(verifier: string) {
 // requesting one that is disabled there fails the whole authorization with
 // `invalid_scope`. Keeping this in an env var means a mismatch can be corrected
 // without a code change.
-const DEFAULT_SCOPE = "openid profile email"
+//
+// `offline_access` is what earns a refresh token, and so the difference between
+// a session that ends when the ID token does an hour later and one that lasts
+// 30 days. Drop it and sign in still works, just not for long.
+const DEFAULT_SCOPE = "openid profile email offline_access"
 
 export async function GET(request: Request) {
   const clientId = process.env.NEXT_PUBLIC_VERCEL_APP_CLIENT_ID

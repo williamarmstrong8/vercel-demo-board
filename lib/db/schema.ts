@@ -1,4 +1,4 @@
-import { pgTable, text, jsonb, boolean, timestamp, index } from "drizzle-orm/pg-core"
+import { pgTable, text, jsonb, boolean, timestamp, index, primaryKey } from "drizzle-orm/pg-core"
 import type { CanvasElement, Camera } from "@/lib/whiteboard/types"
 
 // The serialized canvas payload stored in the `data` JSONB column. This mirrors
@@ -33,6 +33,24 @@ export const boards = pgTable(
   (table) => [
     index("boards_owner_updated_idx").on(table.ownerId, table.updatedAt.desc()),
     index("boards_public_updated_idx").on(table.isPublic, table.updatedAt.desc()),
+  ],
+)
+
+// A user can star each public board once. Keeping this as a join table means
+// the count is derived from real votes rather than a mutable counter that can
+// drift on retries or concurrent requests.
+export const boardStars = pgTable(
+  "board_stars",
+  {
+    boardId: text("board_id")
+      .notNull()
+      .references(() => boards.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.boardId, table.userId] }),
+    index("board_stars_user_idx").on(table.userId),
   ],
 )
 

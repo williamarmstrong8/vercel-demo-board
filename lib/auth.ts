@@ -2,8 +2,6 @@ import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose"
 import { cookies } from "next/headers"
 import { SESSION_COOKIE } from "@/lib/session"
 
-export { SESSION_COOKIE }
-
 const jwks = createRemoteJWKSet(new URL("https://vercel.com/.well-known/jwks"))
 
 export type VercelIdentity = {
