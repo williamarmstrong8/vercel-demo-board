@@ -22,13 +22,15 @@ export function useSiteTheme() {
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect
 
 // Dark mode is scoped to wherever this wraps — the home page's board gallery,
-// and the board editor's own chrome (Component Library, properties panel,
-// zoom controls, canvas) — rather than the whole app: the sign-in screen is a
-// fixed black splash, and the editor's toolbar/top bar are permanently dark
-// tool chrome, like Figma's, not meant to flip. Both places share the same
-// localStorage key, so the preference carries over between them, but each
-// mounts its own provider around its own root element instead of one global
-// <html>-level toggle (see app/layout.tsx's hardcoded `dark` class).
+// and the board editor's own chrome (zoom controls, canvas) — rather than the
+// whole app: the sign-in screen is a fixed black splash, and the editor's
+// toolbar/top bar, Component Library, and properties panel are permanently
+// dark tool chrome, like Figma's, not meant to flip (each pins itself back to
+// dark with its own "dark" class; see component-library.tsx and
+// properties-panel.tsx). Both places share the same localStorage key, so the
+// preference carries over between them, but each mounts its own provider
+// around its own root element instead of one global <html>-level toggle (see
+// app/layout.tsx's hardcoded `dark` class).
 export function SiteThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>("light")
 

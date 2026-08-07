@@ -80,6 +80,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
+// Like the toolbar/top bar, this panel is permanently dark tool chrome and
+// isn't meant to flip with the board's light/dark setting (see
+// SiteThemeProvider) — each returned root below carries a "dark" class to
+// pin its CSS variables regardless of what theme wraps it.
 export function PropertiesPanel() {
   const selectedIds = useWhiteboard((s) => s.selectedIds)
   const editingId = useWhiteboard((s) => s.editingId)
@@ -230,7 +234,7 @@ export function PropertiesPanel() {
   // The eve agent (file-tree) block gets its own edit menu with structure templates.
   if (first.type === "filetree" && selected.length === 1) {
     return (
-      <div className="pointer-events-auto flex max-h-full w-60 flex-col overflow-hidden rounded-xl border border-border bg-card">
+      <div className="dark pointer-events-auto flex max-h-full w-60 flex-col overflow-hidden rounded-xl border border-border bg-card text-foreground">
         <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-4 py-3">
           <span className="text-sm font-semibold">{labelFor(first)}</span>
           <div className="flex gap-1">
@@ -296,7 +300,7 @@ export function PropertiesPanel() {
   const isNode = ["code", "terminal", "server", "database"].includes(first.type)
   if (isNode && selected.length === 1) {
     return (
-      <div className="pointer-events-auto flex max-h-full w-60 flex-col overflow-hidden rounded-xl border border-border bg-card">
+      <div className="dark pointer-events-auto flex max-h-full w-60 flex-col overflow-hidden rounded-xl border border-border bg-card text-foreground">
         <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-4 py-3">
           <span className="text-sm font-semibold">{labelFor(first)}</span>
           <div className="flex gap-1">
@@ -478,7 +482,7 @@ export function PropertiesPanel() {
   }
 
   return (
-    <div className="pointer-events-auto flex max-h-full w-60 flex-col overflow-hidden rounded-xl border border-border bg-card">
+    <div className="dark pointer-events-auto flex max-h-full w-60 flex-col overflow-hidden rounded-xl border border-border bg-card text-foreground">
       <div className="flex shrink-0 items-center justify-between border-b border-border/60 px-4 py-3">
         <span className="text-sm font-semibold">
           {selected.length > 1 ? `${selected.length} selected` : labelFor(first)}
