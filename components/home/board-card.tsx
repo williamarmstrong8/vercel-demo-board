@@ -32,8 +32,11 @@ export function BoardCard({ board }: { board: BoardSummary }) {
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(board.name)
   // Only the viewer's own star is tracked locally; the total is derived from the
-  // server's count plus that one vote, so a refresh can't double-count it.
+  // server's count plus that one vote, so a refresh can't double-count it. This
+  // has its own transition, separate from the shared `pending` below, so
+  // starring never dims the whole card — just the one button.
   const [starred, setStarred] = useState(board.isStarred)
+  const [starPending, startStarTransition] = useTransition()
   const starCount = board.starCount + (starred === board.isStarred ? 0 : starred ? 1 : -1)
   // Delete needs a second, distinct click before it does anything — this is
   // the flag for "the next click on this same button is the real one".
@@ -109,14 +112,15 @@ export function BoardCard({ board }: { board: BoardSummary }) {
     })
   }
 
-  // Flips immediately and reconciles against the server. A rejected star is a
-  // dead end, not a broken page, so a failure just puts the button back.
+  // Flips immediately and reconciles against the server, entirely client-side —
+  // no router.refresh(), so the rest of the card (and grid) never re-renders
+  // just because one star changed. A rejected star is a dead end, not a
+  // broken page, so a failure just puts the button back.
   const toggleStar = () => {
     setStarred((previous) => !previous)
-    startTransition(async () => {
+    startStarTransition(async () => {
       try {
         setStarred(await toggleBoardStar(board.id))
-        router.refresh()
       } catch {
         setStarred(board.isStarred)
       }
@@ -199,7 +203,7 @@ export function BoardCard({ board }: { board: BoardSummary }) {
             ) : (
               <button
                 onClick={toggleStar}
-                disabled={pending}
+                disabled={starPending}
                 className={cn(
                   "flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors hover:bg-muted disabled:opacity-60",
                   starred

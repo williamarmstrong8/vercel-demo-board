@@ -756,6 +756,15 @@ export function CanvasSurface() {
   const gridPx = GRID_SIZE
   const dotRadius = 1
 
+  // The pattern repeats every gridPx, so only the offset within a single tile
+  // matters — wrapping it keeps background-position in [0, gridPx) instead of
+  // handing the browser an origin thousands of pixels off-screen, which is
+  // where it stops tiling and leaves the canvas blank white. Pan far enough
+  // from the origin (a long pasted text block does it easily) and the raw
+  // camera offset gets there.
+  const gridOffsetX = ((camera.x % gridPx) + gridPx) % gridPx
+  const gridOffsetY = ((camera.y % gridPx) + gridPx) % gridPx
+
   return (
     <div
       ref={containerRef}
@@ -771,7 +780,7 @@ export function CanvasSurface() {
         style={{
           backgroundImage: `radial-gradient(rgba(0,0,0,0.18) ${dotRadius}px, transparent ${dotRadius}px)`,
           backgroundSize: `${gridPx}px ${gridPx}px`,
-          backgroundPosition: `${camera.x}px ${camera.y}px`,
+          backgroundPosition: `${gridOffsetX}px ${gridOffsetY}px`,
           opacity: gridPx < 8 ? 0 : 1,
         }}
       />
