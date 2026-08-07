@@ -1,8 +1,10 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import { ImageIcon } from "lucide-react"
 import { useWhiteboard } from "@/lib/whiteboard/store"
 import { createElement } from "@/lib/whiteboard/factory"
+import { dragHasImage, imageSourcesFromDataTransfer, insertImages } from "@/lib/whiteboard/insert-image"
 import {
   getBounds,
   getSelectionBounds,
@@ -150,6 +152,8 @@ export function CanvasSurface() {
 
   const [guides, setGuides] = useState<SnapGuide[]>([])
   const [marquee, setMarquee] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
+  const [dropActive, setDropActive] = useState(false)
+  const dragDepth = useRef(0)
 
   const rect = () => containerRef.current?.getBoundingClientRect()
 
@@ -196,6 +200,62 @@ export function CanvasSurface() {
     node.addEventListener("wheel", onWheel, { passive: false })
     return () => node.removeEventListener("wheel", onWheel)
   }, [])
+
+  // ---- drag & drop images ----
+  // Bound to the window rather than the canvas element: the toolbar and the
+  // properties panel sit above the canvas, and a file dropped on one of those
+  // would otherwise fall through to the browser, which navigates away from the
+  // board to open the image. Listening globally means every drop lands on the
+  // board at the cursor, wherever the chrome happens to be.
+  useEffect(() => {
+    const accepts = (e: DragEvent) =>
+      !useWhiteboard.getState().readOnly && !!e.dataTransfer && dragHasImage(e.dataTransfer)
+
+    // dragenter/dragleave also fire for every element the cursor crosses on the
+    // way in, so a plain boolean flickers the overlay off mid-drag. Counting
+    // enters against leaves keeps it up until the cursor really leaves.
+    const onDragEnter = (e: DragEvent) => {
+      if (!accepts(e)) return
+      e.preventDefault()
+      dragDepth.current += 1
+      setDropActive(true)
+    }
+    const onDragOver = (e: DragEvent) => {
+      if (!accepts(e)) return
+      e.preventDefault()
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy"
+    }
+    const onDragLeave = () => {
+      if (dragDepth.current === 0) return
+      dragDepth.current -= 1
+      if (dragDepth.current === 0) setDropActive(false)
+    }
+    const onDrop = (e: DragEvent) => {
+      const accepted = accepts(e)
+      dragDepth.current = 0
+      setDropActive(false)
+      if (!accepted || !e.dataTransfer) return
+      e.preventDefault()
+      // dataTransfer is emptied the moment this handler returns, so the
+      // sources have to come out of it before anything is awaited.
+      const sources = imageSourcesFromDataTransfer(e.dataTransfer)
+      if (sources.length === 0) return
+      const screen = toScreen(e)
+      const cam = useWhiteboard.getState().current().camera
+      void insertImages(sources, screenToWorld(screen.x, screen.y, cam))
+    }
+
+    window.addEventListener("dragenter", onDragEnter)
+    window.addEventListener("dragover", onDragOver)
+    window.addEventListener("dragleave", onDragLeave)
+    window.addEventListener("drop", onDrop)
+    return () => {
+      window.removeEventListener("dragenter", onDragEnter)
+      window.removeEventListener("dragover", onDragOver)
+      window.removeEventListener("dragleave", onDragLeave)
+      window.removeEventListener("drop", onDrop)
+    }
+  }, [toScreen])
 
   // ---- keyboard shortcuts ----
   useEffect(() => {
@@ -814,6 +874,20 @@ export function CanvasSurface() {
         marquee={marquee}
         onHandleDown={onHandleDown}
       />
+
+      {/* Drop affordance. pointer-events-none matters: an overlay that takes
+          hits would swallow the drag events the container is counting. */}
+      {dropActive && (
+        <div
+          className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
+          style={{ background: "rgba(0,112,243,0.06)", boxShadow: "inset 0 0 0 2px #0070f3" }}
+        >
+          <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-neutral-900 px-4 py-2.5 text-sm text-white">
+            <ImageIcon className="size-4" />
+            Drop to add to the board
+          </div>
+        </div>
+      )}
     </div>
   )
 }
