@@ -477,13 +477,46 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
         ? s.selectedIds.filter((x) => x !== id)
         : [...s.selectedIds, id],
     })),
-  clearSelection: () => set({ selectedIds: [], editingId: null }),
+  // Routes through setEditing (rather than clearing editingId itself) so
+  // leaving edit mode by clicking empty canvas gets the same empty-text
+  // cleanup as blurring the editor directly.
+  clearSelection: () => {
+    get().setEditing(null)
+    set({ selectedIds: [] })
+  },
   selectAll: () => set((s) => ({ selectedIds: s.current().elements.map((e) => e.id) })),
   // Entering text-edit mode is itself blocked, rather than relying on the
   // update() guard, so a read-only viewer never gets a caret in a block they
   // can't actually change.
+  //
+  // This is also the one place that decides what happens to whatever was
+  // being edited before: a `text` block left with no content is discarded
+  // instead of saved as an empty box. Routing every exit from edit mode
+  // through here (blur, Escape, clicking away, double-clicking a different
+  // block, starting a new element) means that cleanup runs no matter which
+  // of those triggered it, rather than only when the editor's own blur
+  // handler happens to fire.
   setEditing: (id) => {
-    if (get().readOnly && id !== null) return
+    const s = get()
+    if (s.readOnly && id !== null) {
+      return
+    }
+    const prevId = s.editingId
+    if (prevId && prevId !== id) {
+      const prevEl = s.current().elements.find((e) => e.id === prevId)
+      if (prevEl && prevEl.type === "text" && !(prevEl.text || "").trim()) {
+        set((st) => {
+          const elements = st.current().elements.filter((e) => e.id !== prevId)
+          return {
+            ...(writeElements(st, elements) as WhiteboardState),
+            selectedIds: st.selectedIds.filter((sid) => sid !== prevId),
+            editingId: id,
+          }
+        })
+        persist(get())
+        return
+      }
+    }
     set({ editingId: id })
   },
 

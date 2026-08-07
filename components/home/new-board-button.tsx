@@ -22,7 +22,7 @@ export function NewBoardButton({ variant = "solid" }: { variant?: "solid" | "til
       <button
         onClick={create}
         disabled={pending}
-        className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-card text-muted-foreground shadow-sm transition-[border-color,box-shadow,color] hover:border-foreground/40 hover:text-foreground hover:shadow-md disabled:opacity-60"
+        className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border bg-card text-muted-foreground shadow-sm transition-[border-color,box-shadow,color] hover:border-foreground/40 hover:text-foreground hover:shadow-md disabled:opacity-60"
       >
         <Plus className="size-6" />
         <span className="text-sm font-medium">{pending ? "Creating…" : "New board"}</span>

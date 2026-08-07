@@ -131,7 +131,7 @@ export function BoardCard({ board }: { board: BoardSummary }) {
     <div className={cn("group relative flex flex-col", pending && "opacity-60")}>
       <button
         onClick={open}
-        className="relative block aspect-[4/3] w-full overflow-hidden rounded-xl border border-border bg-white shadow-sm transition-[border-color,box-shadow] hover:border-foreground/25 hover:shadow-md"
+        className="relative block aspect-[4/3] w-full overflow-hidden rounded-md border border-border bg-background shadow-sm transition-[border-color,box-shadow] hover:border-foreground/25 hover:shadow-md"
         aria-label={`Open ${board.name}`}
       >
         {/* Live, pixel-perfect render of the real board (isolated per iframe). */}

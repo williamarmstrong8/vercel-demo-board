@@ -19,12 +19,18 @@ import {
   Check,
 } from "lucide-react"
 import { useWhiteboard } from "@/lib/whiteboard/store"
-import type { CanvasElement, CodeThemeId, Sloppiness } from "@/lib/whiteboard/types"
+import type { CanvasElement, CodeThemeId, Sloppiness, StrokeStyle } from "@/lib/whiteboard/types"
 import { CODE_THEMES } from "@/lib/whiteboard/code-themes"
 import { CODE_PRESETS } from "@/lib/whiteboard/code-presets"
 import { AGENT_STRUCTURES, EVE_ADD_CATEGORIES, EVE_CHANNELS, type EveStructureTemplate } from "@/lib/whiteboard/eve-templates"
 import { DB_ENGINES, DEFAULT_DB_ENGINE } from "@/lib/whiteboard/db-engines"
+import { rememberElementStyle, type StyleOverride } from "@/lib/whiteboard/factory"
 import { cn } from "@/lib/utils"
+
+// Properties this panel treats as "carry forward to the next shape/card you
+// draw" — a subset of Partial<CanvasElement> kept in sync with
+// factory.ts's StyleOverride.
+const STYLE_MEMORY_KEYS = ["stroke", "fill", "strokeWidth", "strokeStyle", "sloppiness", "rounded"] as const
 
 // 3 shades per hue: dark -> mid -> light (rendered column-major, so each
 // column reads dark at the top down to light at the bottom)
@@ -59,6 +65,12 @@ const SLOPPINESS_LABELS: Record<Sloppiness, string> = {
   2: "Very sketchy",
 }
 
+const STROKE_STYLE_LABELS: Record<StrokeStyle, string> = {
+  solid: "Solid",
+  dashed: "Dashed",
+  dotted: "Dotted",
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="border-b border-border/60 px-4 py-3.5 last:border-b-0">
@@ -72,8 +84,8 @@ export function PropertiesPanel() {
   const selectedIds = useWhiteboard((s) => s.selectedIds)
   const editingId = useWhiteboard((s) => s.editingId)
   const elements = useWhiteboard((s) => (s.projects.find((p) => p.id === s.currentId) ?? s.projects[0]).elements)
-  const update = useWhiteboard((s) => s.update)
-  const updateWithHistory = useWhiteboard((s) => s.updateWithHistory)
+  const rawUpdate = useWhiteboard((s) => s.update)
+  const rawUpdateWithHistory = useWhiteboard((s) => s.updateWithHistory)
   const beginInteraction = useWhiteboard((s) => s.beginInteraction)
   const del = useWhiteboard((s) => s.deleteSelected)
   const select = useWhiteboard((s) => s.select)
@@ -89,6 +101,34 @@ export function PropertiesPanel() {
 
   const first = selected[0]
   const ids = selected.map((e) => e.id)
+
+  // Any patch that touches a "remembered" style key (stroke, fill, width, line
+  // style, sloppiness, edges) also becomes the new default for the next
+  // rectangle/ellipse/diamond/arrow/line/card drawn — see factory.ts's
+  // rememberElementStyle. Wrapping update/updateWithHistory here (rather than
+  // touching every call site) means every existing caller in this file, from
+  // discrete swatch clicks to live color-picker drags, picks this up for free.
+  const rememberStyleFromPatch = (targetIds: string[], patch: Partial<CanvasElement>) => {
+    const style: StyleOverride = {}
+    let has = false
+    for (const key of STYLE_MEMORY_KEYS) {
+      if (key in patch) {
+        style[key] = patch[key] as never
+        has = true
+      }
+    }
+    if (!has) return
+    const targets = elements.filter((e) => targetIds.includes(e.id))
+    for (const el of targets) rememberElementStyle(el.type, style)
+  }
+  const update = (targetIds: string[], patch: Partial<CanvasElement>) => {
+    rawUpdate(targetIds, patch)
+    rememberStyleFromPatch(targetIds, patch)
+  }
+  const updateWithHistory = (targetIds: string[], patch: Partial<CanvasElement>) => {
+    rawUpdateWithHistory(targetIds, patch)
+    rememberStyleFromPatch(targetIds, patch)
+  }
 
   // Companion code blocks and channel UI blocks (both spawned by a file-tree)
   // have no edit menu — they're driven entirely by their file-tree block.
@@ -402,8 +442,9 @@ export function PropertiesPanel() {
   const hasStrokeWidth = selected.some((e) => e.type !== "image" && e.type !== "text")
   const hasFill = selected.some((e) => ["rectangle", "ellipse", "diamond", "card"].includes(e.type))
   const hasText = selected.some((e) => e.type === "text")
-  // only the drawn shapes are rendered from geometry we can sketch
-  const hasSloppiness = selected.some((e) => ["rectangle", "ellipse", "diamond"].includes(e.type))
+  // only the drawn shapes (and cards, which sketch as a rounded rectangle) are
+  // rendered from geometry we can hand-draw
+  const hasSloppiness = selected.some((e) => ["rectangle", "ellipse", "diamond", "card"].includes(e.type))
   // an ellipse has no corners, and a diamond's are always mitred
   const hasEdges = selected.some((e) => ["rectangle", "card"].includes(e.type))
   const strokeLabel = hasText && !hasStrokeWidth ? "Color" : "Stroke"
@@ -417,6 +458,7 @@ export function PropertiesPanel() {
   const opacityVal = (common("opacity") as number) ?? 1
   const sloppinessVal = (common("sloppiness") as Sloppiness | undefined) ?? 0
   const roundedVal = common("rounded") as boolean | undefined
+  const strokeStyleVal = (common("strokeStyle") as StrokeStyle | undefined) ?? "solid"
 
   // Picking a real stroke color and having a non-zero stroke width are both
   // required for a stroke to actually render (see canvas-element's `noStroke`
@@ -540,7 +582,7 @@ export function PropertiesPanel() {
                   const n = Number(e.target.value)
                   if (!Number.isNaN(n)) setStrokeWidth(Math.max(0, Math.min(12, Math.round(n))), false)
                 }}
-                className="h-6 w-9 shrink-0 rounded-md border border-border bg-background text-center text-[11px] tabular-nums outline-none focus:border-foreground/40"
+                className="h-6 w-9 shrink-0 rounded-md border border-border bg-background text-center text-[11px] tabular-nums text-foreground outline-none focus:border-foreground/40"
               />
             </div>
           </Row>
@@ -557,6 +599,23 @@ export function PropertiesPanel() {
           </Row>
         )}
       </Section>
+      )}
+
+      {hasStrokeWidth && (
+        <Section title="Line style">
+          <div className="flex gap-1.5">
+            {(["solid", "dashed", "dotted"] as StrokeStyle[]).map((style) => (
+              <OptionBtn
+                key={style}
+                title={STROKE_STYLE_LABELS[style]}
+                active={strokeStyleVal === style}
+                onClick={() => updateWithHistory(ids, { strokeStyle: style })}
+              >
+                <LineStyleIcon style={style} />
+              </OptionBtn>
+            ))}
+          </div>
+        </Section>
       )}
 
       {hasSloppiness && (
@@ -904,6 +963,15 @@ function SloppinessIcon({ level }: { level: Sloppiness }) {
   )
 }
 
+function LineStyleIcon({ style }: { style: StrokeStyle }) {
+  const dasharray = style === "dashed" ? "3.5 2.5" : style === "dotted" ? "0.5 2.5" : undefined
+  return (
+    <svg viewBox="0 0 16 16" className="size-4" fill="none" stroke="currentColor" strokeWidth={1.6}>
+      <line x1={2} y1={8} x2={14} y2={8} strokeLinecap="round" strokeDasharray={dasharray} />
+    </svg>
+  )
+}
+
 function EdgeIcon({ rounded }: { rounded?: boolean }) {
   return (
     <svg viewBox="0 0 16 16" className="size-4" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round">
@@ -1065,7 +1133,7 @@ function NumberInput({
           }
           e.stopPropagation()
         }}
-        className="h-6 w-12 rounded-md border border-border bg-background text-center text-xs tabular-nums outline-none focus:border-foreground/40"
+        className="h-6 w-12 rounded-md border border-border bg-background text-center text-xs tabular-nums text-foreground outline-none focus:border-foreground/40"
       />
       <button
         onClick={() => step(1)}

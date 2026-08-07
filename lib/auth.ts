@@ -1,6 +1,6 @@
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose"
 import { cookies } from "next/headers"
-import { SESSION_COOKIE } from "@/lib/session"
+import { SESSION_COOKIE, devBypassEnabled } from "@/lib/session"
 
 const jwks = createRemoteJWKSet(new URL("https://vercel.com/.well-known/jwks"))
 
@@ -63,7 +63,21 @@ function toIdentity(payload: JWTPayload): VercelIdentity | null {
   }
 }
 
+// Stable across restarts so boards created while bypassing sign in keep the
+// same owner from one `pnpm dev` session to the next, instead of orphaning
+// themselves the moment the id changed.
+const DEV_USER: VercelIdentity = {
+  id: "dev-local-user",
+  name: "Local Dev",
+  email: "dev@localhost",
+  username: "dev",
+  picture: null,
+  displayName: "Local Dev",
+}
+
 export async function getCurrentUser(): Promise<VercelIdentity | null> {
+  if (devBypassEnabled()) return DEV_USER
+
   const token = (await cookies()).get(SESSION_COOKIE)?.value
   if (!token) return null
 
