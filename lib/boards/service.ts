@@ -196,7 +196,9 @@ export async function toggleBoardStar(id: string): Promise<boolean> {
     return false
   }
 
-  await db.insert(boardStars).values({ boardId: id, userId: user.id })
+  // A double-click shouldn't be an error: the primary key already guarantees one
+  // star per person, so a duplicate insert is simply the state we wanted.
+  await db.insert(boardStars).values({ boardId: id, userId: user.id }).onConflictDoNothing()
   revalidatePath("/")
   return true
 }

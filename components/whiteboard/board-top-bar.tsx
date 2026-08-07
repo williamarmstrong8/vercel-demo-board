@@ -22,8 +22,9 @@ export function BoardTopBar({
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(current.name)
   const [duplicating, startDuplicate] = useTransition()
-  const [isStarred, setIsStarred] = useState(initiallyStarred)
-  const [starCount, setStarCount] = useState(initialStarCount)
+  const [starring, startStar] = useTransition()
+  const [starred, setStarred] = useState(initiallyStarred)
+  const starCount = initialStarCount + (starred === initiallyStarred ? 0 : starred ? 1 : -1)
   const router = useRouter()
 
   const commit = () => {
@@ -42,10 +43,13 @@ export function BoardTopBar({
   }
 
   const toggleStar = () => {
-    startDuplicate(async () => {
-      const starred = await toggleBoardStar(current.id)
-      setIsStarred(starred)
-      setStarCount((count) => count + (starred ? 1 : -1))
+    setStarred((previous) => !previous)
+    startStar(async () => {
+      try {
+        setStarred(await toggleBoardStar(current.id))
+      } catch {
+        setStarred(initiallyStarred)
+      }
     })
   }
 
@@ -120,13 +124,14 @@ export function BoardTopBar({
           </button>
           <button
             onClick={toggleStar}
-            disabled={duplicating}
+            disabled={starring}
             className={`flex shrink-0 items-center gap-1.5 rounded-lg bg-neutral-800 px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-60 ${
-              isStarred ? "text-amber-400" : "text-neutral-200 hover:text-white"
+              starred ? "text-amber-400" : "text-neutral-200 hover:text-white"
             }`}
-            aria-label={isStarred ? "Remove star" : "Star this board"}
+            aria-label={starred ? "Remove star" : "Star this board"}
+            aria-pressed={starred}
           >
-            <Star className={`size-3.5 ${isStarred ? "fill-current" : ""}`} />
+            <Star className={`size-3.5 ${starred ? "fill-current" : ""}`} />
             {starCount}
           </button>
         </>

@@ -39,6 +39,9 @@ export const boards = pgTable(
 // A user can star each public board once. Keeping this as a join table means
 // the count is derived from real votes rather than a mutable counter that can
 // drift on retries or concurrent requests.
+//
+// `userId` deliberately has no foreign key: identities live in the Vercel
+// session JWT (`sub`), not in a Postgres table, so there is nothing to point at.
 export const boardStars = pgTable(
   "board_stars",
   {
