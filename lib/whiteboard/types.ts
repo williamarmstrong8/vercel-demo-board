@@ -63,6 +63,10 @@ export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE"
 
 export type DbEngine = "postgres" | "mysql" | "redis" | "mongodb"
 
+// How a stroke/border is drawn: a plain line, or dashed/dotted. Applies to
+// shapes, lines/arrows, and card borders — anything with a stroke width.
+export type StrokeStyle = "solid" | "dashed" | "dotted"
+
 // Ephemeral run phase for a node during a workflow run (not persisted).
 export type RunPhase = "running" | "done"
 
@@ -81,6 +85,7 @@ export interface CanvasElement {
   opacity: number
   rounded: boolean
   sloppiness?: Sloppiness
+  strokeStyle?: StrokeStyle
   // text / card
   text?: string
   fontSize?: number

@@ -4,8 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useWhiteboard } from "@/lib/whiteboard/store"
 import { getSelectionBounds } from "@/lib/whiteboard/geometry"
 import { CanvasElementView } from "@/components/whiteboard/canvas-element"
+import { useSiteTheme } from "@/components/site-theme"
 import type { BoardSummary } from "@/app/actions/boards"
 import type { Project } from "@/lib/whiteboard/types"
+
+// Mirrors canvas-surface.tsx's own light/dark paper colors exactly, so the
+// thumbnail is a true preview rather than an approximation.
+const CANVAS_BG = { light: "#ffffff", dark: "#171717" }
 
 const PADDING = 40 // world-space breathing room around the content when fitting
 const MAX_ZOOM = 1 // never zoom past 1:1 — tiny boards shouldn't look blown up
@@ -21,6 +26,8 @@ export function BoardPreviewCanvas({ board }: { board: BoardSummary }) {
   const loadBoard = useWhiteboard((s) => s.loadBoard)
   const containerRef = useRef<HTMLDivElement>(null)
   const [ready, setReady] = useState(false)
+  const { theme } = useSiteTheme()
+  const canvasBg = CANVAS_BG[theme]
 
   // Elements come straight from the board prop so the render never races the
   // store subscription. We still push them into this iframe's isolated store
@@ -90,7 +97,10 @@ export function BoardPreviewCanvas({ board }: { board: BoardSummary }) {
 
   if (isEmpty) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-white text-sm text-muted-foreground">
+      <div
+        className="flex h-full w-full items-center justify-center text-sm text-muted-foreground"
+        style={{ background: canvasBg }}
+      >
         Empty board
       </div>
     )
@@ -100,8 +110,8 @@ export function BoardPreviewCanvas({ board }: { board: BoardSummary }) {
     <div
       ref={containerRef}
       // Fully non-interactive: this is a static snapshot of the live canvas.
-      className="relative h-full w-full overflow-hidden bg-white"
-      style={{ pointerEvents: "none" }}
+      className="relative h-full w-full overflow-hidden"
+      style={{ pointerEvents: "none", background: canvasBg }}
     >
       <div style={worldStyle}>
         {elements.map((el) => (

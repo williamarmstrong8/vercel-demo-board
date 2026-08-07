@@ -76,6 +76,7 @@ export const blockSchema = z.object({
   codeTheme: z.enum(["dark", "light", "monokai"]).optional(),
   fill: z.string().optional().describe("CSS color. Omit to use the block type's default."),
   stroke: z.string().optional().describe("CSS color. Omit to use the block type's default."),
+  strokeStyle: z.enum(["solid", "dashed", "dotted"]).optional().describe("Shapes, lines, and arrows only. Defaults to solid."),
 })
 
 export type BlockSpec = z.infer<typeof blockSchema>

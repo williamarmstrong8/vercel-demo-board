@@ -46,6 +46,15 @@ export function deleteCookie(response: NextResponse, name: string) {
   response.cookies.delete({ name, path: COOKIE_PATH })
 }
 
+// Lets `proxy.ts` and `getCurrentUser()` skip the real Vercel OAuth flow
+// entirely — useful because Sign in with Vercel requires a registered app and
+// a public callback URL, neither of which a laptop has. Gated on NODE_ENV as
+// well as the env var so a copy-pasted `.env` can't accidentally leave the
+// gate open on a real deployment.
+export function devBypassEnabled(): boolean {
+  return process.env.NODE_ENV !== "production" && process.env.DEV_BYPASS_AUTH === "1"
+}
+
 export type Session = {
   idToken: string
   // Absent when `offline_access` isn't among the granted scopes, which leaves

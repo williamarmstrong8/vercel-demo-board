@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { ImageIcon } from "lucide-react"
 import { useWhiteboard } from "@/lib/whiteboard/store"
-import { createElement } from "@/lib/whiteboard/factory"
+import { createElement, setElementTheme } from "@/lib/whiteboard/factory"
+import { useSiteTheme } from "@/components/site-theme"
 import { dragHasImage, imageSourcesFromDataTransfer, insertImages } from "@/lib/whiteboard/insert-image"
 import {
   getBounds,
@@ -149,6 +150,16 @@ export function CanvasSurface() {
   const editingId = useWhiteboard((s) => s.editingId)
   const tool = useWhiteboard((s) => s.tool)
   const pendingTemplate = useWhiteboard((s) => s.pendingTemplate)
+
+  // Keeps factory.ts's default stroke color in step with the board's own
+  // light/dark preference, so a freshly drawn shape or text element is
+  // actually visible against whichever canvas color is showing (see
+  // setElementTheme's doc comment) — purely a "what color does the next new
+  // element get" switch, never a repaint of anything already on the board.
+  const { theme } = useSiteTheme()
+  useEffect(() => {
+    setElementTheme(theme)
+  }, [theme])
 
   const [guides, setGuides] = useState<SnapGuide[]>([])
   const [marquee, setMarquee] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
@@ -714,7 +725,10 @@ export function CanvasSurface() {
         e.preventDefault()
         store.setTool("select")
         gesture.current = { mode: "idle" }
-        if (tool === "text") store.setEditing(el.id)
+        // Always routes through setEditing (even to null) so starting a new
+        // block flushes any empty text box left open from before — otherwise
+        // preventDefault above would suppress the blur that normally does it.
+        store.setEditing(tool === "text" ? el.id : null)
       } else {
         gesture.current = { mode: "create", id: el.id, start: { x: startX, y: startY } }
       }
@@ -817,21 +831,6 @@ export function CanvasSurface() {
           ? "default"
           : "crosshair"
 
-  // The dot grid stays a fixed screen-space pattern — it pans with the camera
-  // but its spacing and dot size never scale with zoom. Only the content layer
-  // below is transformed by camera.zoom.
-  const gridPx = GRID_SIZE
-  const dotRadius = 1
-
-  // The pattern repeats every gridPx, so only the offset within a single tile
-  // matters — wrapping it keeps background-position in [0, gridPx) instead of
-  // handing the browser an origin thousands of pixels off-screen, which is
-  // where it stops tiling and leaves the canvas blank white. Pan far enough
-  // from the origin (a long pasted text block does it easily) and the raw
-  // camera offset gets there.
-  const gridOffsetX = ((camera.x % gridPx) + gridPx) % gridPx
-  const gridOffsetY = ((camera.y % gridPx) + gridPx) % gridPx
-
   return (
     <div
       ref={containerRef}
@@ -839,19 +838,8 @@ export function CanvasSurface() {
       onDoubleClick={onDoubleClick}
       onContextMenu={(e) => e.preventDefault()}
       className="absolute inset-0 touch-none select-none overflow-hidden"
-      style={{ cursor, background: "#ffffff" }}
+      style={{ cursor, background: theme === "dark" ? "#171717" : "#ffffff" }}
     >
-      {/* dot grid */}
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          backgroundImage: `radial-gradient(rgba(0,0,0,0.18) ${dotRadius}px, transparent ${dotRadius}px)`,
-          backgroundSize: `${gridPx}px ${gridPx}px`,
-          backgroundPosition: `${gridOffsetX}px ${gridOffsetY}px`,
-          opacity: gridPx < 8 ? 0 : 1,
-        }}
-      />
-
       {/* world layer */}
       <div
         style={{

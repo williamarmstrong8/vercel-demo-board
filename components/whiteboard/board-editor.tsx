@@ -6,6 +6,8 @@ import { Toolbar } from "@/components/whiteboard/toolbar"
 import { PropertiesPanel } from "@/components/whiteboard/properties-panel"
 import { ZoomControls } from "@/components/whiteboard/zoom-controls"
 import { BoardTopBar } from "@/components/whiteboard/board-top-bar"
+import { SiteThemeProvider } from "@/components/site-theme"
+import { ThemeToggle } from "@/components/theme-toggle"
 import {
   useWhiteboard,
   enableCloudDraft,
@@ -218,62 +220,71 @@ export function BoardEditor({
 
   if (loadError) {
     return (
-      <main className="flex h-dvh w-dvw items-center justify-center bg-background">
-        <p className="text-sm text-muted-foreground">Couldn&apos;t load this board.</p>
-      </main>
+      <SiteThemeProvider>
+        <main className="flex h-dvh w-dvw items-center justify-center bg-background text-foreground">
+          <p className="text-sm text-muted-foreground">Couldn&apos;t load this board.</p>
+        </main>
+      </SiteThemeProvider>
     )
   }
 
   if (!ready) {
     return (
-      <main className="flex h-dvh w-dvw items-center justify-center bg-background">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-foreground" />
-          Loading board…
-        </div>
-      </main>
+      <SiteThemeProvider>
+        <main className="flex h-dvh w-dvw items-center justify-center bg-background text-foreground">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-foreground" />
+            Loading board…
+          </div>
+        </main>
+      </SiteThemeProvider>
     )
   }
 
   return (
-    <main className="relative h-dvh w-dvw overflow-hidden bg-background">
-      <CanvasSurface />
+    <SiteThemeProvider>
+      <main className="relative h-dvh w-dvw overflow-hidden bg-background text-foreground">
+        <CanvasSurface />
 
-      {/* Top-left: back / board name */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between p-3">
-        <div className="pointer-events-auto flex items-center gap-2">
-          <BoardTopBar
-            canEdit={canEdit}
-            authorName={board?.authorName ?? null}
-            initialStarCount={board?.starCount ?? 0}
-            initiallyStarred={board?.isStarred ?? false}
-          />
+        {/* Top-left: back / board name */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between p-3">
+          <div className="pointer-events-auto flex items-center gap-2">
+            <BoardTopBar
+              canEdit={canEdit}
+              authorName={board?.authorName ?? null}
+              initialStarCount={board?.starCount ?? 0}
+              initiallyStarred={board?.isStarred ?? false}
+            />
+          </div>
         </div>
-      </div>
 
-      {/* Top-center: toolbar. Drawing tools and the properties panel are the
-          whole editing surface, so a reader simply doesn't get them. */}
-      {canEdit && (
-        <>
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex justify-center p-3">
-            <div className="pointer-events-auto">
-              <Toolbar />
+        {/* Top-center: toolbar. Drawing tools and the properties panel are the
+            whole editing surface, so a reader simply doesn't get them. */}
+        {canEdit && (
+          <>
+            <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex justify-center p-3">
+              <div className="pointer-events-auto">
+                <Toolbar />
+              </div>
+            </div>
+
+            {/* Right: properties */}
+            <div className="pointer-events-none absolute right-3 top-20 bottom-3 z-30 flex flex-col items-end">
+              <PropertiesPanel />
+            </div>
+          </>
+        )}
+
+        {/* Bottom-left: zoom + theme toggle */}
+        <div className="pointer-events-none absolute bottom-3 left-3 z-30">
+          <div className="pointer-events-auto flex items-center gap-2">
+            <ZoomControls />
+            <div className="flex items-center rounded-xl border border-border bg-card/90 p-1 backdrop-blur-md">
+              <ThemeToggle />
             </div>
           </div>
-
-          {/* Right: properties */}
-          <div className="pointer-events-none absolute right-3 top-20 bottom-3 z-30 flex flex-col items-end">
-            <PropertiesPanel />
-          </div>
-        </>
-      )}
-
-      {/* Bottom-left: zoom */}
-      <div className="pointer-events-none absolute bottom-3 left-3 z-30">
-        <div className="pointer-events-auto">
-          <ZoomControls />
         </div>
-      </div>
-    </main>
+      </main>
+    </SiteThemeProvider>
   )
 }
