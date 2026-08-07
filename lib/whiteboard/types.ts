@@ -11,6 +11,7 @@ export type Tool =
   | "code"
   | "terminal"
   | "server"
+  | "database"
   | "image"
   | "filetree"
   | "channelui"
@@ -32,6 +33,7 @@ export type ElementType =
   | "code"
   | "terminal"
   | "server"
+  | "database"
   | "image"
   | "filetree"
   | "channelui"
@@ -58,6 +60,8 @@ export type CodeThemeId = "dark" | "light" | "monokai"
 export type Sloppiness = 0 | 1 | 2
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE"
+
+export type DbEngine = "postgres" | "mysql" | "redis" | "mongodb"
 
 // Ephemeral run phase for a node during a workflow run (not persisted).
 export type RunPhase = "running" | "done"
@@ -92,6 +96,8 @@ export interface CanvasElement {
   // server node
   method?: HttpMethod
   endpoint?: string
+  // database node
+  dbEngine?: DbEngine
   // image
   src?: string
   // eve agent file-tree block

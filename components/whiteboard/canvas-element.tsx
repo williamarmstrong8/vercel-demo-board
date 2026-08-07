@@ -1,7 +1,7 @@
 "use client"
 
 import { memo, useState, useLayoutEffect, useEffect, useRef, useMemo } from "react"
-import { Play, Loader2, RotateCw, ChevronDown, ChevronRight, Folder, FileText, SquareTerminal, ExternalLink, Waypoints, Server, Send, Zap } from "lucide-react"
+import { Play, Loader2, RotateCw, ChevronDown, ChevronRight, Folder, FileText, SquareTerminal, ExternalLink, Waypoints, Server, Database, Send, Zap } from "lucide-react"
 import type { AgentFile, CanvasElement, RunPhase } from "@/lib/whiteboard/types"
 import { getBounds } from "@/lib/whiteboard/geometry"
 import { getCodeTheme, tokenizeLine } from "@/lib/whiteboard/code-themes"
@@ -12,6 +12,7 @@ import { useWhiteboard } from "@/lib/whiteboard/store"
 import { METHOD_COLORS } from "@/lib/whiteboard/workflow"
 import { channelsForFiles, channelById, type EveChannelMeta } from "@/lib/whiteboard/eve-templates"
 import { GATEWAY_MODELS, gatewayModelById, DEFAULT_GATEWAY_MODEL } from "@/lib/whiteboard/ai-gateway-models"
+import { DB_ENGINES, dbEngineById, DEFAULT_DB_ENGINE } from "@/lib/whiteboard/db-engines"
 import { ChannelChat, CHANNEL_UI_SCALE, s } from "@/components/whiteboard/channel-chat"
 import { ScrollBox } from "@/components/whiteboard/scroll-box"
 
@@ -656,6 +657,8 @@ function renderContent(el: CanvasElement, b: { width: number; height: number }, 
       return <TerminalView el={el} />
     case "server":
       return <ServerView el={el} phase={phase} />
+    case "database":
+      return <DatabaseView el={el} />
     case "filetree":
       return <FileTreeView el={el} />
     case "channelui":
@@ -1527,6 +1530,254 @@ function ServerView({ el, phase }: { el: CanvasElement; phase: RunPhase | undefi
         <span style={{ color: "#8a8a8a" }}>
           {status === "idle" ? "ready" : status === "processing" ? "handling request…" : "200 OK · 42ms"}
         </span>
+      </div>
+    </div>
+  )
+}
+
+// SQL-ish/command keywords colored across every engine's illustrative query —
+// deliberately generic (not a real parser) since the query shape differs
+// between SQL, Redis commands, and Mongo's method-chain syntax.
+const QUERY_KEYWORDS = new Set([
+  "select", "from", "where", "limit", "insert", "into", "values", "update", "set",
+  "delete", "hgetall", "get", "expire", "find", "findone", "db",
+])
+
+function renderQueryTokens(query: string) {
+  const kw = "#ff7b72"
+  const str = "#a5d6ff"
+  const plain = "#c9d1d9"
+  // Split on quoted strings first so keyword matching never reaches inside them.
+  const parts = query.split(/("[^"]*"|'[^']*')/g)
+  return parts.map((part, i) => {
+    if (/^["'].*["']$/.test(part)) {
+      return <span key={i} style={{ color: str }}>{part}</span>
+    }
+    const words = part.split(/(\s+|[(),.])/)
+    return (
+      <span key={i}>
+        {words.map((w, j) => {
+          const isKeyword = QUERY_KEYWORDS.has(w.toLowerCase())
+          return (
+            <span key={j} style={{ color: isKeyword ? kw : plain, fontWeight: isKeyword ? 600 : 400 }}>
+              {w}
+            </span>
+          )
+        })}
+      </span>
+    )
+  })
+}
+
+/**
+ * Database showcase block. Mirrors AiGatewayView's "swap one line, keep the
+ * shape" pitch: picking an engine pill swaps the illustrative query and
+ * result table but keeps the same card chrome, so the block reads as one
+ * consistent product idea rather than four different mockups.
+ */
+function DatabaseView({ el }: { el: CanvasElement }) {
+  const update = useWhiteboard((s) => s.update)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [flash, setFlash] = useState(false)
+
+  const engine = dbEngineById(el.dbEngine ?? DEFAULT_DB_ENGINE)
+  const mono = { fontFamily: "var(--font-mono)", fontSize: 12.5, lineHeight: "20px" } as const
+  const muted = "#8b949e"
+
+  // Auto-size the block to exactly fit its content (same approach as ServerView/AiGatewayView).
+  useLayoutEffect(() => {
+    const node = contentRef.current
+    if (!node) return
+    let raf = 0
+    const measure = () => {
+      const h = Math.ceil(node.scrollHeight) + 2
+      if (Math.abs(h - el.height) > 1) update([el.id], { height: h })
+    }
+    measure()
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(measure)
+    })
+    ro.observe(node)
+    return () => {
+      cancelAnimationFrame(raf)
+      ro.disconnect()
+    }
+  }, [el.id, el.height, el.width, engine.id, update])
+
+  const pickEngine = (id: string) => {
+    if (id === engine.id) return
+    update([el.id], { dbEngine: id as CanvasElement["dbEngine"] })
+    setFlash(true)
+    window.setTimeout(() => setFlash(false), 700)
+  }
+
+  return (
+    <div
+      ref={contentRef}
+      style={{
+        width: "100%",
+        borderRadius: el.rounded ? 10 : 2,
+        background: "#0a0a0a",
+        border: "1px solid #2e2e2e",
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+        fontFamily: "var(--font-sans)",
+      }}
+    >
+      {/* header: identity + live engine badge, same chrome as Server/AI Gateway */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "0 12px",
+          height: 38,
+          background: "#141414",
+          borderBottom: "1px solid #1f1f1f",
+          flexShrink: 0,
+        }}
+      >
+        <Database size={14} color="#ededed" strokeWidth={2} />
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: "#ededed" }}>{el.title || "Database"}</span>
+        <span style={{ flex: 1 }} />
+        <span
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontFamily: "var(--font-mono)",
+            fontSize: 10,
+            color: "#8a8a8a",
+            border: "1px solid #2a2a2a",
+            borderRadius: 9999,
+            padding: "2px 8px",
+            whiteSpace: "nowrap",
+          }}
+        >
+          <span style={{ width: 6, height: 6, borderRadius: 9999, background: engine.accent, flexShrink: 0 }} />
+          {engine.label}
+        </span>
+      </div>
+
+      {/* query */}
+      <div style={{ padding: "12px 16px 0", ...mono, color: "#c9d1d9", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+        <span style={{ color: muted }}>{"› "}</span>
+        {renderQueryTokens(engine.query)}
+      </div>
+
+      {/* result table */}
+      <div style={{ padding: "10px 16px 14px" }}>
+        <div style={{ borderRadius: 8, border: "1px solid #232323", overflow: "hidden" }}>
+          <div style={{ display: "flex", background: "#141414", borderBottom: "1px solid #232323" }}>
+            {engine.columns.map((col) => (
+              <span
+                key={col}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  padding: "6px 10px",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 10.5,
+                  fontWeight: 600,
+                  color: muted,
+                  textOverflow: "ellipsis",
+                  overflow: "hidden",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {col}
+              </span>
+            ))}
+          </div>
+          {engine.rows.map((row, i) => (
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                borderBottom: i < engine.rows.length - 1 ? "1px solid #1a1a1a" : "none",
+                background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)",
+              }}
+            >
+              {row.map((cell, j) => (
+                <span
+                  key={j}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    padding: "6px 10px",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 11.5,
+                    color: "#d4d4d4",
+                    textOverflow: "ellipsis",
+                    overflow: "hidden",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {cell}
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* footer: compact call result, same convention as Server's footer */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "0 12px",
+          height: 34,
+          borderTop: "1px solid #1f1f1f",
+          background: "#0d0d0d",
+          flexShrink: 0,
+          ...mono,
+          fontSize: 11,
+        }}
+      >
+        <span
+          style={{
+            width: 7,
+            height: 7,
+            borderRadius: 9999,
+            background: flash ? "#28c840" : engine.accent,
+            boxShadow: `0 0 6px ${flash ? "#28c840" : engine.accent}`,
+            flexShrink: 0,
+            transition: "background 0.5s ease",
+          }}
+        />
+        <span style={{ color: "#8a8a8a" }}>{engine.rows.length} rows · 4ms</span>
+        <span style={{ flex: 1 }} />
+        <div style={{ display: "flex", gap: 5 }}>
+          {DB_ENGINES.map((e) => (
+            <button
+              key={e.id}
+              type="button"
+              title={e.label}
+              aria-pressed={e.id === engine.id}
+              onPointerDown={(ev) => ev.stopPropagation()}
+              onClick={(ev) => {
+                ev.stopPropagation()
+                pickEngine(e.id)
+              }}
+              style={{
+                pointerEvents: "auto",
+                width: 8,
+                height: 8,
+                borderRadius: 9999,
+                cursor: "pointer",
+                padding: 0,
+                border: "none",
+                background: e.id === engine.id ? e.accent : "#333333",
+                boxShadow: e.id === engine.id ? `0 0 4px ${e.accent}` : "none",
+                transition: "background 0.15s ease",
+              }}
+            />
+          ))}
+        </div>
       </div>
     </div>
   )

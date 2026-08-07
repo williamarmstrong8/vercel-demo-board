@@ -23,6 +23,7 @@ import type { CanvasElement, CodeThemeId, Sloppiness } from "@/lib/whiteboard/ty
 import { CODE_THEMES } from "@/lib/whiteboard/code-themes"
 import { CODE_PRESETS } from "@/lib/whiteboard/code-presets"
 import { AGENT_STRUCTURES, EVE_ADD_CATEGORIES, EVE_CHANNELS, type EveStructureTemplate } from "@/lib/whiteboard/eve-templates"
+import { DB_ENGINES, DEFAULT_DB_ENGINE } from "@/lib/whiteboard/db-engines"
 import { cn } from "@/lib/utils"
 
 // 3 shades per hue: dark -> mid -> light (rendered column-major, so each
@@ -251,8 +252,8 @@ export function PropertiesPanel() {
     )
   }
 
-  // Workflow nodes (code / terminal / server) get a dedicated menu.
-  const isNode = ["code", "terminal", "server"].includes(first.type)
+  // Workflow nodes (code / terminal / server / database) get a dedicated menu.
+  const isNode = ["code", "terminal", "server", "database"].includes(first.type)
   if (isNode && selected.length === 1) {
     return (
       <div className="pointer-events-auto flex max-h-full w-60 flex-col overflow-hidden rounded-xl border border-border bg-card">
@@ -328,6 +329,44 @@ export function PropertiesPanel() {
                 onChange={(e) => update(ids, { endpoint: e.target.value })}
                 className="h-8 w-full rounded-md border border-border bg-background px-2.5 text-xs outline-none focus:border-foreground/40"
               />
+            </Section>
+          </>
+        )}
+
+        {first.type === "database" && (
+          <>
+            <Section title="Name">
+              <input
+                type="text"
+                value={first.title ?? ""}
+                placeholder="Database"
+                onFocus={beginInteraction}
+                onChange={(e) => update(ids, { title: e.target.value })}
+                className="h-8 w-full rounded-md border border-border bg-background px-2.5 text-xs outline-none focus:border-foreground/40"
+              />
+            </Section>
+            <Section title="Engine">
+              <div className="flex flex-col gap-1">
+                {DB_ENGINES.map((eng) => {
+                  const active = (first.dbEngine ?? DEFAULT_DB_ENGINE) === eng.id
+                  return (
+                    <button
+                      key={eng.id}
+                      onClick={() => updateWithHistory(ids, { dbEngine: eng.id })}
+                      className={cn(
+                        "flex items-center gap-2.5 rounded-md border px-2.5 py-1.5 text-left transition-colors",
+                        active ? "border-foreground bg-muted" : "border-border hover:border-foreground/40 hover:bg-muted",
+                      )}
+                    >
+                      <span
+                        className="size-2 shrink-0 rounded-full"
+                        style={{ background: eng.accent }}
+                      />
+                      <span className="text-xs font-medium">{eng.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
             </Section>
           </>
         )}
@@ -737,6 +776,8 @@ function labelFor(el: CanvasElement) {
     card: "Card",
     code: "Code block",
     terminal: "Terminal",
+    server: "Server",
+    database: "Database",
     image: "Image",
     filetree: "eve agent",
   }

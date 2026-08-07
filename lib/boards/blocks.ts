@@ -2,6 +2,7 @@ import { z } from "zod"
 import type { AgentFile, CanvasElement, ElementType } from "@/lib/whiteboard/types"
 import { AGENT_STRUCTURES } from "@/lib/whiteboard/eve-templates"
 import { DEFAULT_GATEWAY_MODEL } from "@/lib/whiteboard/ai-gateway-models"
+import { DEFAULT_DB_ENGINE } from "@/lib/whiteboard/db-engines"
 import { CARD, ARROW_PAD } from "@/lib/whiteboard/board-design"
 import { uid } from "./service"
 
@@ -29,6 +30,7 @@ export const AUTHORABLE_BLOCK_TYPES = [
   "code",
   "terminal",
   "server",
+  "database",
   "filetree",
   "aigateway",
   "ec2",
@@ -58,6 +60,10 @@ export const blockSchema = z.object({
   italic: z.boolean().optional(),
   method: z.enum(["GET", "POST", "PUT", "DELETE"]).optional().describe("server blocks only."),
   endpoint: z.string().optional().describe("server blocks only, e.g. /api/hello."),
+  dbEngine: z
+    .enum(["postgres", "mysql", "redis", "mongodb"])
+    .optional()
+    .describe("database blocks only. Defaults to postgres."),
   gatewayModel: z
     .string()
     .optional()
@@ -174,6 +180,8 @@ function defaultsFor(type: ElementType): Defaults {
       }
     case "server":
       return { ...DARK_PANEL, width: 300, height: 180, method: "GET", endpoint: "/api/hello", showRun: false }
+    case "database":
+      return { ...DARK_PANEL, width: 320, height: 230, title: "Database", dbEngine: DEFAULT_DB_ENGINE }
     case "filetree": {
       const struct = AGENT_STRUCTURES[0]
       return {
