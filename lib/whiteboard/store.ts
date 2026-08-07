@@ -497,14 +497,24 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
     const s = get()
     if (s.readOnly || s.clipboard.length === 0) return
     s.beginInteraction()
-    const offset = at ? { x: at.x, y: at.y } : { x: 24, y: 24 }
-    // anchor to first element for positioning relative to cursor
-    const base = s.clipboard[0]
+    // When a target point is given, center the pasted group's bounding box
+    // on it (e.g. the current viewport center) rather than anchoring to the
+    // first element's raw coordinates.
+    let dx = 24
+    let dy = 24
+    if (at) {
+      const minX = Math.min(...s.clipboard.map((e) => e.x))
+      const minY = Math.min(...s.clipboard.map((e) => e.y))
+      const maxX = Math.max(...s.clipboard.map((e) => e.x + e.width))
+      const maxY = Math.max(...s.clipboard.map((e) => e.y + e.height))
+      dx = at.x - (minX + maxX) / 2
+      dy = at.y - (minY + maxY) / 2
+    }
     const copies = s.clipboard.map((e) => ({
       ...e,
       id: uid(),
-      x: at ? offset.x + (e.x - base.x) : e.x + 24,
-      y: at ? offset.y + (e.y - base.y) : e.y + 24,
+      x: e.x + dx,
+      y: e.y + dy,
     }))
     set((st) => writeElements(st, [...st.current().elements, ...copies]) as WhiteboardState)
     set({ selectedIds: copies.map((c) => c.id) })

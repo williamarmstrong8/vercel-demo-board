@@ -236,7 +236,13 @@ export function CanvasSurface() {
       } else if (meta && e.key.toLowerCase() === "c") {
         store.copy()
       } else if (meta && e.key.toLowerCase() === "v") {
-        store.paste()
+        // Paste centered on the viewport, not wherever the copied elements
+        // originally lived on the board — matches user expectation when
+        // they've panned/zoomed away from the copy source.
+        const cam = store.current().camera
+        const cx = window.innerWidth / 2
+        const cy = window.innerHeight / 2
+        store.paste({ x: (cx - cam.x) / cam.zoom, y: (cy - cam.y) / cam.zoom })
       } else if (meta && e.key.toLowerCase() === "d") {
         e.preventDefault()
         store.duplicateSelected()

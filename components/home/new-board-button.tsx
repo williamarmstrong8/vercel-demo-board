@@ -22,21 +22,10 @@ export function NewBoardButton({ variant = "solid" }: { variant?: "solid" | "til
       <button
         onClick={create}
         disabled={pending}
-        className="relative flex w-full flex-col overflow-hidden rounded-xl border border-dashed border-border bg-card text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground disabled:opacity-60"
+        className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-card text-muted-foreground shadow-sm transition-[border-color,box-shadow,color] hover:border-foreground/40 hover:text-foreground hover:shadow-md disabled:opacity-60"
       >
-        {/* invisible sizer matching BoardCard's 4:3 thumbnail + title/timestamp
-            footer, so this tile's total height lines up with real board cards */}
-        <span aria-hidden className="aspect-[4/3] w-full" />
-        <span aria-hidden className="w-full px-3 py-2.5">
-          <span className="block h-5" />
-          <span className="mt-0.5 block h-4" />
-        </span>
-        {/* the plus + label are centered over the whole card, not just the
-            thumbnail area, so they sit in the visual middle of the tile */}
-        <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2">
-          <Plus className="size-6" />
-          <span className="text-sm font-medium">{pending ? "Creating…" : "New board"}</span>
-        </span>
+        <Plus className="size-6" />
+        <span className="text-sm font-medium">{pending ? "Creating…" : "New board"}</span>
       </button>
     )
   }

@@ -1,7 +1,7 @@
 import { db } from "@/lib/db"
 import { boards, boardStars, type BoardData, type BoardRow } from "@/lib/db/schema"
 import { writeBoardData, BoardWriteDeniedError } from "@/lib/db/board-writes"
-import { getCurrentUser, requireUser, type VercelIdentity } from "@/lib/auth"
+import { getCurrentUser, requireUser } from "@/lib/auth"
 import { and, eq, ne, desc, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 
@@ -40,7 +40,6 @@ export interface BoardSummary {
   data: BoardData
   isPublic: boolean
   authorName: string | null
-  authorAvatar: string | null
   description: string | null
   updatedAt: string
   starCount: number
@@ -62,7 +61,6 @@ function toSummary(
     data: row.data,
     isPublic: row.isPublic,
     authorName: row.authorName,
-    authorAvatar: row.authorAvatar,
     description: row.description,
     updatedAt: row.updatedAt.toISOString(),
     starCount: stars.count,
@@ -102,34 +100,7 @@ export async function listMyBoards(): Promise<BoardSummary[]> {
     .where(eq(boards.ownerId, user.id))
     .orderBy(desc(boards.updatedAt))
 
-  await refreshAuthorIdentity(user, rows)
   return starSummaries(rows, user.id)
-}
-
-// The author name and avatar on a board are denormalized copies of whoever made
-// it, so they go stale: boards predating the avatar column have none at all, and
-// a renamed account leaves an old byline behind. Only the owner can supply those
-// values, so loading your own boards is the one moment we can correct them. The
-// rows are already in hand, which keeps this free unless something is out of date.
-async function refreshAuthorIdentity(user: VercelIdentity, rows: BoardRow[]): Promise<void> {
-  const stale = rows.some(
-    (row) =>
-      row.authorName !== user.displayName ||
-      (user.picture !== null && row.authorAvatar !== user.picture),
-  )
-  if (!stale) return
-
-  // Leaves updatedAt alone: whose board it is isn't a content edit, so like
-  // renameBoard it must not reorder the grid.
-  await db
-    .update(boards)
-    .set({ authorName: user.displayName, authorAvatar: user.picture })
-    .where(eq(boards.ownerId, user.id))
-
-  for (const row of rows) {
-    row.authorName = user.displayName
-    row.authorAvatar = user.picture
-  }
 }
 
 // Boards other people have published. The viewer's own public boards are
@@ -180,7 +151,6 @@ export async function createBoardFromData(name: string, data: BoardData): Promis
     // Captured now rather than joined at read time: there is no users table, so
     // this is the only record of who made the board once it's shared.
     authorName: user.displayName,
-    authorAvatar: user.picture,
     name: name?.trim() || "Untitled board",
     data,
     isPublic: false,

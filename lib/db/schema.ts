@@ -26,7 +26,6 @@ export const boards = pgTable(
     data: jsonb("data").$type<BoardData>().notNull(),
     isPublic: boolean("is_public").notNull().default(false),
     authorName: text("author_name"),
-    authorAvatar: text("author_avatar"),
     description: text("description"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

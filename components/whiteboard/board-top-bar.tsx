@@ -5,18 +5,15 @@ import { useRouter } from "next/navigation"
 import { ArrowLeft, Copy, Eye, Star } from "lucide-react"
 import { useWhiteboard } from "@/lib/whiteboard/store"
 import { duplicateBoard, toggleBoardStar } from "@/app/actions/boards"
-import { UserAvatar } from "@/components/user-avatar"
 
 export function BoardTopBar({
   canEdit = true,
   authorName = null,
-  authorAvatar = null,
   initialStarCount = 0,
   initiallyStarred = false,
 }: {
   canEdit?: boolean
   authorName?: string | null
-  authorAvatar?: string | null
   initialStarCount?: number
   initiallyStarred?: boolean
 }) {
@@ -109,19 +106,12 @@ export function BoardTopBar({
           >
             <Eye className="size-3.5" />
             View only
+            {authorName && (
+              <span className="hidden max-w-[140px] truncate text-neutral-500 sm:inline">
+                · {authorName}
+              </span>
+            )}
           </span>
-
-          {/* Credits whoever shared the board, face first. */}
-          {authorName && (
-            <span className="hidden shrink-0 items-center gap-1.5 text-xs text-neutral-400 sm:flex">
-              <UserAvatar
-                name={authorName}
-                src={authorAvatar}
-                className="size-4 bg-neutral-700 text-[8px] text-white"
-              />
-              <span className="max-w-[140px] truncate">{authorName}</span>
-            </span>
-          )}
 
           {/* Can't edit this one, but can always take a copy. */}
           <button
@@ -135,13 +125,13 @@ export function BoardTopBar({
           <button
             onClick={toggleStar}
             disabled={starring}
-            className={`flex shrink-0 items-center gap-1.5 rounded-lg bg-neutral-800 px-2.5 py-1 text-xs font-medium tabular-nums transition-colors hover:bg-neutral-700 disabled:opacity-60 ${
-              starred ? "text-white" : "text-neutral-300"
+            className={`flex shrink-0 items-center gap-1.5 rounded-none bg-neutral-800 px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-60 ${
+              starred ? "text-amber-400" : "text-neutral-200 hover:text-white"
             }`}
             aria-label={starred ? "Remove star" : "Star this board"}
             aria-pressed={starred}
           >
-            <Star className={`size-3 ${starred ? "fill-current" : ""}`} />
+            <Star className={`size-3.5 ${starred ? "fill-current" : ""}`} />
             {starCount}
           </button>
         </>

@@ -27,11 +27,7 @@ export default async function HomePage() {
           </div>
           <div className="flex items-center gap-3">
             <NewBoardButton />
-            <UserMenu
-              displayName={user.displayName}
-              email={user.email}
-              picture={user.picture}
-            />
+            <UserMenu displayName={user.displayName} email={user.email} />
           </div>
         </div>
       </header>
@@ -59,7 +55,7 @@ export default async function HomePage() {
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-1 items-start gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             <NewBoardButton variant="tile" />
             {myBoards.map((board) => (
               <BoardCard key={board.id} board={board} />
@@ -83,7 +79,7 @@ export default async function HomePage() {
           </div>
 
           {sharedBoards.length > 0 ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid grid-cols-1 items-start gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {sharedBoards.map((board) => (
                 <BoardCard key={board.id} board={board} />
               ))}

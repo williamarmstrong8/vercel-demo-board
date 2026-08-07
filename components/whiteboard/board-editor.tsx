@@ -245,7 +245,6 @@ export function BoardEditor({
           <BoardTopBar
             canEdit={canEdit}
             authorName={board?.authorName ?? null}
-            authorAvatar={board?.authorAvatar ?? null}
             initialStarCount={board?.starCount ?? 0}
             initiallyStarred={board?.isStarred ?? false}
           />

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Copy, Globe, Lock, MoreHorizontal, Pencil, Star, Trash2 } from "lucide-react"
+import { Copy, Globe, Lock, MoreVertical, Pencil, Star, Trash2 } from "lucide-react"
 import {
   deleteBoard,
   duplicateBoard,
@@ -11,7 +11,6 @@ import {
   toggleBoardStar,
   type BoardSummary,
 } from "@/app/actions/boards"
-import { UserAvatar } from "@/components/user-avatar"
 import { cn } from "@/lib/utils"
 
 function timeAgo(iso: string) {
@@ -129,15 +128,10 @@ export function BoardCard({ board }: { board: BoardSummary }) {
   }
 
   return (
-    <div
-      className={cn(
-        "group relative flex flex-col rounded-xl border border-border bg-card transition-colors hover:border-foreground/30",
-        pending && "opacity-60",
-      )}
-    >
+    <div className={cn("group relative flex flex-col", pending && "opacity-60")}>
       <button
         onClick={open}
-        className="relative block aspect-[4/3] w-full overflow-hidden rounded-t-xl border-b border-border bg-white"
+        className="relative block aspect-[4/3] w-full overflow-hidden rounded-xl border border-border bg-white shadow-sm transition-[border-color,box-shadow] hover:border-foreground/25 hover:shadow-md"
         aria-label={`Open ${board.name}`}
       >
         {/* Live, pixel-perfect render of the real board (isolated per iframe). */}
@@ -160,88 +154,42 @@ export function BoardCard({ board }: { board: BoardSummary }) {
         )}
       </button>
 
-      <div className="flex items-center gap-2 px-3 py-2.5">
-        <div className="min-w-0 flex-1">
-          {renaming ? (
-            <input
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onBlur={commitRename}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") commitRename()
-                if (e.key === "Escape") {
-                  setName(board.name)
-                  setRenaming(false)
-                }
-              }}
-              className="w-full rounded border border-border bg-background px-1.5 py-0.5 text-sm outline-none focus:border-foreground"
-            />
-          ) : (
-            <button onClick={open} className="block w-full truncate text-left text-sm font-medium">
-              {board.name}
-            </button>
-          )}
-          {/* Someone else's board is credited to them, face and all; on your
-              own the byline would just be you, so it's the edit time instead. */}
-          {board.isOwner || !board.authorName ? (
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">
-              Edited {timeAgo(board.updatedAt)}
-            </p>
-          ) : (
-            <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-              <UserAvatar
-                name={board.authorName}
-                src={board.authorAvatar}
-                className="size-4 text-[8px]"
+      <div className="mt-2.5 space-y-0.5 px-0.5">
+        <div className="flex items-center gap-1">
+          <div className="min-w-0 flex-1">
+            {renaming ? (
+              <input
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onBlur={commitRename}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitRename()
+                  if (e.key === "Escape") {
+                    setName(board.name)
+                    setRenaming(false)
+                  }
+                }}
+                className="w-full rounded border border-border bg-background px-1.5 py-0.5 text-sm outline-none focus:border-foreground"
               />
-              <span className="truncate">{board.authorName}</span>
-              <span aria-hidden="true">·</span>
-              <span className="shrink-0">{timeAgo(board.updatedAt)}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex shrink-0 items-center gap-1">
-          {/* Stars only mean something on a public board. Your own board shows
-              the tally as read-out — you don't get to vote for yourself. */}
-          {board.isPublic &&
-            (board.isOwner ? (
-              <span
-                className="flex items-center gap-1.5 px-1 text-xs tabular-nums text-muted-foreground"
-                title={`${starCount} ${starCount === 1 ? "star" : "stars"}`}
-              >
-                <Star className="size-3" />
-                {starCount}
-              </span>
             ) : (
-              <button
-                onClick={toggleStar}
-                disabled={starPending}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs font-medium tabular-nums transition-colors hover:bg-muted disabled:opacity-60",
-                  starred ? "text-foreground" : "text-muted-foreground hover:text-foreground",
-                )}
-                aria-label={starred ? `Remove star from ${board.name}` : `Star ${board.name}`}
-                aria-pressed={starred}
-                title={starred ? "Remove star" : "Star this board"}
-              >
-                <Star className={cn("size-3", starred && "fill-current")} />
-                {starCount}
+              <button onClick={open} className="block w-full truncate text-left text-sm font-medium">
+                {board.name}
               </button>
-            ))}
+            )}
+          </div>
 
           {/* Every card gets the same always-visible menu; what's inside it
               depends on ownership, since rename, publish and delete are the
               owner's alone while anyone can take a copy. */}
-          <div ref={menuRef} className="relative">
+          <div ref={menuRef} className="relative shrink-0">
             <button
               onClick={() => setMenuOpen((o) => !o)}
               className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               aria-label={`Options for ${board.name}`}
               aria-expanded={menuOpen}
             >
-              <MoreHorizontal className="size-4" />
+              <MoreVertical className="size-4" />
             </button>
             {menuOpen && (
               <div className="dark absolute right-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-lg border border-border bg-popover py-1 text-popover-foreground shadow-xl">
@@ -304,6 +252,44 @@ export function BoardCard({ board }: { board: BoardSummary }) {
               </div>
             )}
           </div>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+            {board.isOwner || !board.authorName
+              ? `Edited ${timeAgo(board.updatedAt)}`
+              : `${board.authorName} · ${timeAgo(board.updatedAt)}`}
+          </p>
+
+          {/* Stars only mean something on a public board. Your own board shows
+              the tally as read-out — you don't get to vote for yourself. */}
+          {board.isPublic &&
+            (board.isOwner ? (
+              <span
+                className="flex shrink-0 items-center gap-1 px-1.5 py-0.5 text-xs text-muted-foreground"
+                title={`${starCount} ${starCount === 1 ? "star" : "stars"}`}
+              >
+                <Star className="size-3.5" />
+                {starCount}
+              </span>
+            ) : (
+              <button
+                onClick={toggleStar}
+                disabled={starPending}
+                className={cn(
+                  "flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs transition-colors hover:bg-muted disabled:opacity-60",
+                  starred
+                    ? "text-amber-500 hover:text-amber-500"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+                aria-label={starred ? `Remove star from ${board.name}` : `Star ${board.name}`}
+                aria-pressed={starred}
+                title={starred ? "Remove star" : "Star this board"}
+              >
+                <Star className={cn("size-3.5", starred && "fill-current")} />
+                {starCount}
+              </button>
+            ))}
         </div>
       </div>
     </div>
