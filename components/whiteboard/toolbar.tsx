@@ -13,7 +13,9 @@ import {
   SquareStack,
   ImageIcon,
 } from "lucide-react"
-import { useWhiteboard, uid } from "@/lib/whiteboard/store"
+import { useWhiteboard } from "@/lib/whiteboard/store"
+import { insertImages } from "@/lib/whiteboard/insert-image"
+import { screenToWorld } from "@/lib/whiteboard/geometry"
 import type { Tool } from "@/lib/whiteboard/types"
 import { cn } from "@/lib/utils"
 import { ComponentLibrary } from "@/components/whiteboard/component-library"
@@ -42,47 +44,15 @@ export function Toolbar() {
   const setTool = useWhiteboard((s) => s.setTool)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // Picked images land in the middle of the viewport; dragging one in instead
+  // drops it under the cursor. Both go through the same insert.
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      const src = reader.result as string
-      const imgEl = new window.Image()
-      imgEl.onload = () => {
-        const store = useWhiteboard.getState()
-        const cam = (store.projects.find((p) => p.id === store.currentId) ?? store.projects[0]).camera
-        const vw = window.innerWidth / 2
-        const vh = window.innerHeight / 2
-        const cx = (vw - cam.x) / cam.zoom
-        const cy = (vh - cam.y) / cam.zoom
-        const maxW = 360
-        const scale = Math.min(1, maxW / imgEl.width)
-        const w = imgEl.width * scale
-        const h = imgEl.height * scale
-        store.addElement({
-          id: uid(),
-          type: "image",
-          x: cx - w / 2,
-          y: cy - h / 2,
-          width: w,
-          height: h,
-          rotation: 0,
-          stroke: "transparent",
-          fill: "transparent",
-          strokeWidth: 0,
-          opacity: 1,
-          rounded: true,
-          src,
-          z: 0,
-        })
-        store.setTool("select")
-        store.select([])
-      }
-      imgEl.src = src
-    }
-    reader.readAsDataURL(file)
+    const files = Array.from(e.target.files ?? [])
     e.target.value = ""
+    if (files.length === 0) return
+    const cam = useWhiteboard.getState().current().camera
+    const center = screenToWorld(window.innerWidth / 2, window.innerHeight / 2, cam)
+    void insertImages(files, center)
   }
 
   return (
@@ -111,7 +81,7 @@ export function Toolbar() {
       >
         <ImageIcon className="size-[18px]" />
       </button>
-      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
+      <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={onFile} />
       <div className="mx-1 h-6 w-px bg-white/10" />
       <ComponentLibrary />
     </div>
