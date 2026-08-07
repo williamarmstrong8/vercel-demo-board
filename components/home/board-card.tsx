@@ -254,19 +254,21 @@ export function BoardCard({ board }: { board: BoardSummary }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-1">
-          <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <p className="min-w-0 truncate text-xs text-muted-foreground">
             {board.isOwner || !board.authorName
               ? `Edited ${timeAgo(board.updatedAt)}`
               : `${board.authorName} · ${timeAgo(board.updatedAt)}`}
           </p>
 
           {/* Stars only mean something on a public board. Your own board shows
-              the tally as read-out — you don't get to vote for yourself. */}
+              the tally as read-out — you don't get to vote for yourself. Sits
+              right next to the timestamp rather than pinned to the far edge,
+              so the line reads as one piece of metadata. */}
           {board.isPublic &&
             (board.isOwner ? (
               <span
-                className="flex shrink-0 items-center gap-1 px-1.5 py-0.5 text-xs text-muted-foreground"
+                className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground"
                 title={`${starCount} ${starCount === 1 ? "star" : "stars"}`}
               >
                 <Star className="size-3.5" />
@@ -277,7 +279,7 @@ export function BoardCard({ board }: { board: BoardSummary }) {
                 onClick={toggleStar}
                 disabled={starPending}
                 className={cn(
-                  "flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs transition-colors hover:bg-muted disabled:opacity-60",
+                  "flex shrink-0 items-center gap-1 rounded-md px-1 text-xs transition-colors hover:bg-muted disabled:opacity-60",
                   starred
                     ? "text-amber-500 hover:text-amber-500"
                     : "text-muted-foreground hover:text-foreground",
