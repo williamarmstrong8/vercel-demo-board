@@ -8,6 +8,7 @@ import {
   Code2,
   SquareTerminal,
   Server,
+  Database,
   FolderTree,
   ArrowRight,
   Waypoints,
@@ -68,6 +69,14 @@ const ITEMS: LibraryItem[] = [
     category: "deploy-scale",
   },
   {
+    id: "database",
+    icon: Database,
+    label: "Database",
+    description: "Postgres/MySQL/Redis/MongoDB store with a sample query and result.",
+    keywords: ["database", "db", "postgres", "mysql", "redis", "mongodb", "sql", "data", "store", "query"],
+    category: "deploy-scale",
+  },
+  {
     id: "ec2",
     icon: HardDrive,
     label: "Amazon EC2",
@@ -121,6 +130,7 @@ const ITEMS: LibraryItem[] = [
 const NODE_ICONS: Partial<Record<ElementType, React.ComponentType<{ className?: string }>>> = {
   code: Code2,
   server: Server,
+  database: Database,
   terminal: SquareTerminal,
   filetree: FolderTree,
   aigateway: Waypoints,

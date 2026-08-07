@@ -2,6 +2,7 @@ import type { CanvasElement, Tool } from "./types"
 import { uid } from "./store"
 import { AGENT_STRUCTURES } from "./eve-templates"
 import { DEFAULT_GATEWAY_MODEL } from "./ai-gateway-models"
+import { DEFAULT_DB_ENGINE } from "./db-engines"
 
 // Default fill used for shapes (fill, no stroke by default)
 export const DEFAULT_SHAPE_FILL = "#e4e4e7"
@@ -112,6 +113,19 @@ export function createElement(
         strokeWidth: 1,
         rounded: true,
         showRun: false,
+      }
+    case "database":
+      return {
+        ...base,
+        type: "database",
+        width: 320,
+        height: 230,
+        title: "Database",
+        dbEngine: DEFAULT_DB_ENGINE,
+        fill: "#0a0a0a",
+        stroke: "#2e2e2e",
+        strokeWidth: 1,
+        rounded: true,
       }
     case "aigateway":
       return {

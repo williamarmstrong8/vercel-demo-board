@@ -37,6 +37,7 @@ PICK THE RIGHT BLOCK — do not default to cards:
 - code — real source code. \`title\` = filename, \`text\` = the code. Use for ANY code sample.
 - terminal — shell commands or CLI output. \`title\` = shell name, \`text\` = the transcript.
 - server — an HTTP API endpoint. \`method\` + \`endpoint\`.
+- database — a data store (Postgres/MySQL/Redis/MongoDB). \`dbEngine\` (defaults to postgres).
 - card — a labeled box: a titled concept (title + one to three sentences) OR a labeled node in a flow/diagram (\`title\` only, omit \`text\`). Your default for boxes-with-labels.
 - text — a heading, label, or standalone line (no box). Sizing below.
 - rectangle / ellipse / diamond — UNLABELED shapes only (a colored panel behind a group, a divider, a plain node). They render NO text — never use one where a label must show; use a card.
@@ -52,7 +53,7 @@ DESIGN SYSTEM — use these EXACT sizes so the board has real hierarchy (never o
 - Vary it: mix title-only nodes with detailed cards, standard and wide widths, and the heading scale, so the board reads as a designed layout — not a wall of same-size cards.
 
 RULES:
-- Prefer specialized blocks over cards: code to code, commands to terminal, endpoint to server.
+- Prefer specialized blocks over cards: code to code, commands to terminal, endpoint to server, data store to database.
 - Emojis: almost never — do NOT put one in every title. At most one or two on the whole board. Titles are plain text.
 - Card text: one to three concise sentences. Consolidate related points; don't flood the board with tiny cards.
 - Flow / sequence: make each step a title-only \`card\` (or a real block where apt), lay them left-to-right (omit x/y), and put ONE \`arrow\` between each pair. Auto-placed arrows snap to the blocks' edges with padding — just alternate: step, arrow, step, arrow, step.

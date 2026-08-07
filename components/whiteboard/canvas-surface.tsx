@@ -668,7 +668,7 @@ export function CanvasSurface() {
     }
 
     // creation tools
-    if (["rectangle", "ellipse", "diamond", "arrow", "line", "text", "card", "code", "terminal", "server", "filetree", "aigateway", "ec2", "fluidcompute", "serverlesscompute", "computecomparison", "requestdemo"].includes(tool)) {
+    if (["rectangle", "ellipse", "diamond", "arrow", "line", "text", "card", "code", "terminal", "server", "database", "filetree", "aigateway", "ec2", "fluidcompute", "serverlesscompute", "computecomparison", "requestdemo"].includes(tool)) {
       // starting an arrow/line on a highlighted shape snaps the start point
       // just off that shape's outline rather than the raw click position
       let startX = world.x
@@ -692,6 +692,7 @@ export function CanvasSurface() {
         tool === "code" ||
         tool === "terminal" ||
         tool === "server" ||
+        tool === "database" ||
         tool === "filetree" ||
         tool === "aigateway" ||
         tool === "ec2" ||
