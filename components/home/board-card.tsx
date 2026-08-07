@@ -11,6 +11,7 @@ import {
   toggleBoardStar,
   type BoardSummary,
 } from "@/app/actions/boards"
+import { UserAvatar } from "@/components/user-avatar"
 import { cn } from "@/lib/utils"
 
 function timeAgo(iso: string) {
@@ -181,11 +182,24 @@ export function BoardCard({ board }: { board: BoardSummary }) {
               {board.name}
             </button>
           )}
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">
-            {board.isOwner || !board.authorName
-              ? `Edited ${timeAgo(board.updatedAt)}`
-              : `${board.authorName} · ${timeAgo(board.updatedAt)}`}
-          </p>
+          {/* Someone else's board is credited to them, face and all; on your
+              own the byline would just be you, so it's the edit time instead. */}
+          {board.isOwner || !board.authorName ? (
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+              Edited {timeAgo(board.updatedAt)}
+            </p>
+          ) : (
+            <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+              <UserAvatar
+                name={board.authorName}
+                src={board.authorAvatar}
+                className="size-4 text-[8px]"
+              />
+              <span className="truncate">{board.authorName}</span>
+              <span aria-hidden="true">·</span>
+              <span className="shrink-0">{timeAgo(board.updatedAt)}</span>
+            </div>
+          )}
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
@@ -194,10 +208,10 @@ export function BoardCard({ board }: { board: BoardSummary }) {
           {board.isPublic &&
             (board.isOwner ? (
               <span
-                className="flex items-center gap-1 px-1.5 py-1 text-xs text-muted-foreground"
+                className="flex items-center gap-1.5 px-1 text-xs tabular-nums text-muted-foreground"
                 title={`${starCount} ${starCount === 1 ? "star" : "stars"}`}
               >
-                <Star className="size-3.5" />
+                <Star className="size-3" />
                 {starCount}
               </span>
             ) : (
@@ -205,16 +219,14 @@ export function BoardCard({ board }: { board: BoardSummary }) {
                 onClick={toggleStar}
                 disabled={starPending}
                 className={cn(
-                  "flex items-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors hover:bg-muted disabled:opacity-60",
-                  starred
-                    ? "text-amber-500 hover:text-amber-500"
-                    : "text-muted-foreground hover:text-foreground",
+                  "flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs font-medium tabular-nums transition-colors hover:bg-muted disabled:opacity-60",
+                  starred ? "text-foreground" : "text-muted-foreground hover:text-foreground",
                 )}
                 aria-label={starred ? `Remove star from ${board.name}` : `Star ${board.name}`}
                 aria-pressed={starred}
                 title={starred ? "Remove star" : "Star this board"}
               >
-                <Star className={cn("size-3.5", starred && "fill-current")} />
+                <Star className={cn("size-3", starred && "fill-current")} />
                 {starCount}
               </button>
             ))}

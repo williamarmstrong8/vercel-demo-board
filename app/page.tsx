@@ -27,7 +27,11 @@ export default async function HomePage() {
           </div>
           <div className="flex items-center gap-3">
             <NewBoardButton />
-            <UserMenu displayName={user.displayName} email={user.email} />
+            <UserMenu
+              displayName={user.displayName}
+              email={user.email}
+              picture={user.picture}
+            />
           </div>
         </div>
       </header>
