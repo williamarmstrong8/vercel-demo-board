@@ -1,0 +1,455 @@
+"use client"
+
+import { useEffect, useMemo, useRef, useState } from "react"
+import {
+  Blocks,
+  X,
+  Search,
+  Code2,
+  SquareTerminal,
+  Server,
+  Database,
+  FolderTree,
+  ArrowRight,
+  Waypoints,
+  Square,
+  HardDrive,
+  FunctionSquare,
+  Send,
+} from "lucide-react"
+import { useWhiteboard } from "@/lib/whiteboard/store"
+import type { ElementType, Tool } from "@/lib/whiteboard/types"
+import { cn } from "@/lib/utils"
+import {
+  WORKFLOW_TEMPLATES,
+  instantiateTemplate,
+  type WorkflowTemplate,
+} from "@/lib/whiteboard/workflow-templates"
+
+type LibraryCategory = "build-ai" | "deploy-scale" | "developer-tools"
+
+interface LibraryItem {
+  id: Tool
+  icon: React.ComponentType<{ className?: string }>
+  label: string
+  description: string
+  keywords: string[]
+  category: LibraryCategory
+}
+
+const CATEGORY_ORDER: { id: LibraryCategory; label: string }[] = [
+  { id: "build-ai", label: "Build with AI" },
+  { id: "deploy-scale", label: "Deploy & Scale" },
+  { id: "developer-tools", label: "Developer Tools" },
+]
+
+const ITEMS: LibraryItem[] = [
+  {
+    id: "code",
+    icon: Code2,
+    label: "Code block",
+    description: "Syntax-highlighted snippet with a file name.",
+    keywords: ["code", "snippet", "editor", "file", "typescript", "js"],
+    category: "developer-tools",
+  },
+  {
+    id: "terminal",
+    icon: SquareTerminal,
+    label: "Terminal",
+    description: "Command-line output panel.",
+    keywords: ["terminal", "shell", "bash", "cli", "console", "command"],
+    category: "developer-tools",
+  },
+  {
+    id: "server",
+    icon: Server,
+    label: "Server",
+    description: "API endpoint node with method and response.",
+    keywords: ["server", "api", "endpoint", "backend", "request", "http"],
+    category: "deploy-scale",
+  },
+  {
+    id: "database",
+    icon: Database,
+    label: "Database",
+    description: "Postgres/MySQL/Redis/MongoDB store with a sample query and result.",
+    keywords: ["database", "db", "postgres", "mysql", "redis", "mongodb", "sql", "data", "store", "query"],
+    category: "deploy-scale",
+  },
+  {
+    id: "ec2",
+    icon: HardDrive,
+    label: "Amazon EC2",
+    description: "Always-on server tower with live illustrative spend.",
+    keywords: ["aws", "amazon", "ec2", "server", "instance", "compute", "cost", "spend"],
+    category: "deploy-scale",
+  },
+  {
+    id: "fluidcompute",
+    icon: FunctionSquare,
+    label: "Vercel Fluid Compute",
+    description: "Pooled functions with active-compute spend.",
+    keywords: ["vercel", "functions", "fluid", "compute", "serverless", "cost", "spend", "pool"],
+    category: "deploy-scale",
+  },
+  {
+    id: "serverlesscompute",
+    icon: FunctionSquare,
+    label: "Serverless Functions",
+    description: "One isolated function instance per request.",
+    keywords: ["functions", "serverless", "compute", "instance", "request", "cost", "spend"],
+    category: "deploy-scale",
+  },
+  {
+    id: "computecomparison",
+    icon: Blocks,
+    label: "Compute comparison",
+    description: "Compare Fluid, Serverless, and Server request usage.",
+    keywords: ["fluid", "serverless", "server", "compute", "comparison", "request", "usage", "cost"],
+    category: "deploy-scale",
+  },
+  {
+    id: "filetree",
+    icon: FolderTree,
+    label: "eve agent",
+    description: "IDE-style file tree for an eve agent, with editable templates.",
+    keywords: ["eve", "agent", "file", "tree", "explorer", "ai", "tool", "folder"],
+    category: "build-ai",
+  },
+  {
+    id: "aigateway",
+    icon: Waypoints,
+    label: "AI Gateway",
+    description: "Swap between hundreds of models by changing one line of code.",
+    keywords: ["ai", "gateway", "model", "models", "provider", "openai", "anthropic", "llm", "switch", "route"],
+    category: "build-ai",
+  },
+]
+
+// Icons used to sketch a template's flow inside its thumbnail.
+const NODE_ICONS: Partial<Record<ElementType, React.ComponentType<{ className?: string }>>> = {
+  code: Code2,
+  server: Server,
+  database: Database,
+  terminal: SquareTerminal,
+  filetree: FolderTree,
+  aigateway: Waypoints,
+  ec2: HardDrive,
+  fluidcompute: FunctionSquare,
+  serverlesscompute: FunctionSquare,
+  computecomparison: Blocks,
+  requestdemo: Send,
+}
+
+type Section = "components" | "templates"
+
+// However many nodes a template has, the thumbnail only has room to sketch a
+// handful of glyphs before it either overflows the fixed-width card or reads
+// as visual noise — cap it and fold anything past the limit into a "+N" chip.
+const MAX_THUMBNAIL_ICONS = 4
+
+/**
+ * A miniature "image" of the template's actual flow: the ordered node glyphs
+ * connected by arrows, drawn on a subtle dotted mini-canvas so it reads like a
+ * shrunken board.
+ */
+function FlowThumbnail({ template }: { template: WorkflowTemplate }) {
+  const overflow = template.nodes.length - MAX_THUMBNAIL_ICONS
+  const shown = overflow > 0 ? template.nodes.slice(0, MAX_THUMBNAIL_ICONS - 1) : template.nodes.slice(0, MAX_THUMBNAIL_ICONS)
+  return (
+    <div
+      className="flex h-full min-h-[92px] w-full items-center justify-center gap-0.5 overflow-hidden rounded-lg border border-border bg-background px-1.5"
+      style={{
+        backgroundImage: "radial-gradient(circle, var(--color-border) 1px, transparent 1px)",
+        backgroundSize: "10px 10px",
+      }}
+    >
+      {shown.map((n, i) => {
+        const Icon = NODE_ICONS[n.type] ?? Square
+        return (
+          <span key={n.ref} className="flex items-center gap-0.5">
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground">
+              <Icon className="size-3" />
+            </span>
+            {(i < shown.length - 1 || overflow > 0) && (
+              <ArrowRight className="size-2.5 shrink-0 text-muted-foreground/60" />
+            )}
+          </span>
+        )
+      })}
+      {overflow > 0 && (
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-border bg-card text-[10px] font-medium text-muted-foreground">
+          +{overflow + 1}
+        </span>
+      )}
+    </div>
+  )
+}
+
+export function ComponentLibrary() {
+  const [open, setOpen] = useState(false)
+  const [section, setSection] = useState<Section>("components")
+  const [query, setQuery] = useState("")
+  const inputRef = useRef<HTMLInputElement>(null)
+  const setTool = useWhiteboard((s) => s.setTool)
+  const setPendingTemplate = useWhiteboard((s) => s.setPendingTemplate)
+  const clearSelection = useWhiteboard((s) => s.clearSelection)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false)
+    }
+    document.addEventListener("keydown", onKey)
+    return () => document.removeEventListener("keydown", onKey)
+  }, [])
+
+  useEffect(() => {
+    if (open) {
+      setQuery("")
+      setSection("components")
+      // focus the search field once the modal is mounted
+      requestAnimationFrame(() => inputRef.current?.focus())
+    }
+  }, [open])
+
+  const componentResults = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return ITEMS
+    return ITEMS.filter(
+      (it) =>
+        it.label.toLowerCase().includes(q) ||
+        it.description.toLowerCase().includes(q) ||
+        it.keywords.some((k) => k.includes(q)),
+    )
+  }, [query])
+
+  const componentGroups = useMemo(
+    () => CATEGORY_ORDER.map((category) => ({
+      ...category,
+      items: ITEMS.filter((item) => item.category === category.id),
+    })).filter((category) => category.items.length > 0),
+    [],
+  )
+
+  const templateResults = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return WORKFLOW_TEMPLATES
+    return WORKFLOW_TEMPLATES.filter(
+      (t) =>
+        t.name.toLowerCase().includes(q) ||
+        t.description.toLowerCase().includes(q) ||
+        t.preview.some((p) => p.toLowerCase().includes(q)),
+    )
+  }, [query])
+
+  // A live query searches across BOTH sections at once; the tabs only drive the
+  // default (empty-query) view.
+  const searching = query.trim().length > 0
+
+  const pickComponent = (item: LibraryItem) => {
+    setTool(item.id)
+    setOpen(false)
+  }
+
+  const useTemplate = (t: WorkflowTemplate) => {
+    const { elements } = instantiateTemplate(t)
+    setPendingTemplate({ elements })
+    setOpen(false)
+  }
+
+  const onInputKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== "Enter") return
+    e.preventDefault()
+    if (searching) {
+      // Prefer a matching component, otherwise fall back to a matching template.
+      if (componentResults.length > 0) pickComponent(componentResults[0])
+      else if (templateResults.length > 0) useTemplate(templateResults[0])
+    } else if (section === "components" && componentResults.length > 0) {
+      pickComponent(componentResults[0])
+    } else if (section === "templates" && templateResults.length > 0) {
+      useTemplate(templateResults[0])
+    }
+  }
+
+  const renderComponentRow = (item: LibraryItem) => {
+    const Icon = item.icon
+    return (
+      <button
+        key={item.id}
+        onClick={() => pickComponent(item)}
+        className={cn(
+          "group flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left transition-colors",
+          "hover:border-border hover:bg-muted",
+        )}
+      >
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-foreground">
+          <Icon className="size-[18px]" />
+        </span>
+        <span className="flex min-w-0 flex-col">
+          <span className="text-sm font-medium">{item.label}</span>
+          <span className="truncate text-xs text-muted-foreground">{item.description}</span>
+        </span>
+      </button>
+    )
+  }
+
+  const renderTemplateRow = (t: WorkflowTemplate) => (
+    <button
+      key={t.id}
+      onClick={() => useTemplate(t)}
+      className="group flex items-stretch gap-3 rounded-xl border border-transparent p-2.5 text-left transition-colors hover:border-border hover:bg-muted"
+    >
+      {/* flow "image" card */}
+      <span className="w-40 shrink-0">
+        <FlowThumbnail template={t} />
+      </span>
+
+      {/* details */}
+      <span className="flex min-w-0 flex-1 flex-col gap-1.5 py-0.5">
+        <span className="flex items-center justify-between gap-2">
+          <span className="text-sm font-semibold">{t.name}</span>
+          <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+        </span>
+        <p className="text-xs leading-relaxed text-muted-foreground">{t.description}</p>
+        <span className="mt-auto flex flex-wrap items-center gap-1.5 pt-1">
+          {t.preview.map((chip, i) => (
+            <span key={i} className="flex items-center gap-1.5">
+              <span className="rounded-md border border-border bg-card px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+                {chip}
+              </span>
+              {i < t.preview.length - 1 && <span className="text-muted-foreground/50">{"→"}</span>}
+            </span>
+          ))}
+        </span>
+      </span>
+    </button>
+  )
+
+  return (
+    <>
+      <button
+        onClick={() => {
+          // Opening the library while an element's properties menu is open
+          // would otherwise leave both floating panels on screen at once.
+          clearSelection()
+          setOpen(true)
+        }}
+        title="Components & templates"
+        className="flex size-9 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-white/10 hover:text-white"
+      >
+        <Blocks className="size-[18px]" />
+      </button>
+
+      {open && (
+        <div
+          className="pointer-events-auto fixed inset-0 z-50 flex items-start justify-center p-4 pt-[10vh]"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Components and templates"
+        >
+          {/* backdrop */}
+          <button
+            aria-label="Close"
+            onClick={() => setOpen(false)}
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+          />
+
+          {/* modal — always dark, like the toolbar/top bar, regardless of the
+              board's light/dark setting (see SiteThemeProvider) */}
+          <div className="dark relative z-10 flex max-h-[74vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-card text-foreground shadow-2xl">
+            {/* search */}
+            <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
+              <Search className="size-4 shrink-0 text-muted-foreground" />
+              <input
+                ref={inputRef}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={onInputKeyDown}
+                placeholder="Search components and templates…"
+                className="h-6 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              />
+              <button
+                onClick={() => setOpen(false)}
+                aria-label="Close"
+                className="flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            {/* section filter — only relevant when not searching across both */}
+            {!searching && (
+              <div className="flex shrink-0 items-center gap-1 border-b border-border px-3 py-2">
+                {(
+                  [
+                    { id: "components", label: "Components" },
+                    { id: "templates", label: "Templates" },
+                  ] as { id: Section; label: string }[]
+                ).map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setSection(tab.id)}
+                    aria-pressed={section === tab.id}
+                    className={cn(
+                      "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                      section === tab.id
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                    )}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* body */}
+            {searching ? (
+              <div className="flex flex-col gap-1 overflow-y-auto p-2">
+                {componentResults.length === 0 && templateResults.length === 0 ? (
+                  <div className="px-3 py-8 text-center text-sm text-muted-foreground">
+                    No components or templates match {`"${query}"`}
+                  </div>
+                ) : (
+                  <>
+                    {componentResults.length > 0 && (
+                      <>
+                        <div className="px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Components
+                        </div>
+                        {componentResults.map(renderComponentRow)}
+                      </>
+                    )}
+                    {templateResults.length > 0 && (
+                      <>
+                        <div className="px-3 pb-1 pt-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Templates
+                        </div>
+                        {templateResults.map(renderTemplateRow)}
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            ) : section === "components" ? (
+              <div className="flex flex-col overflow-y-auto p-2">
+                {componentGroups.map((group, index) => (
+                  <section key={group.id} className={cn("flex flex-col gap-1", index > 0 && "mt-3 border-t border-border pt-3")} aria-labelledby={`component-category-${group.id}`}>
+                    <h3 id={`component-category-${group.id}`} className="px-3 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      {group.label}
+                    </h3>
+                    {group.items.map(renderComponentRow)}
+                  </section>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1 overflow-y-auto p-2">
+                {WORKFLOW_TEMPLATES.map(renderTemplateRow)}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  )
+}

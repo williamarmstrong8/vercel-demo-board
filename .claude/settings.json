@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(python3 -)",
+      "Bash(git -C /Users/williamarmstrong/Projects/Production/vercel-demo-board status)",
+      "Bash(git -C /Users/williamarmstrong/Projects/Production/vercel-demo-board diff --stat)",
+      "Bash(npx next *)",
+      "Bash(curl -sf http://localhost:3000 -o /dev/null)",
+      "Read(//tmp/**)",
+      "Read(//private/tmp/**)"
+    ]
+  }
+}

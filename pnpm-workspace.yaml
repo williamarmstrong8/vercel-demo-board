@@ -1,0 +1,6 @@
+onlyBuiltDependencies:
+  - '@mongodb-js/zstd'
+  - esbuild
+  - msw
+  - node-liblzma
+  - sharp
