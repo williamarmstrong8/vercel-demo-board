@@ -111,6 +111,11 @@ export interface CanvasElement {
   // text / card
   text?: string
   fontSize?: number
+  // Card body size. `fontSize` governs a card's title; this governs the copy
+  // under it, so a style pack can set both independently. Undefined means the
+  // design-system default (CARD.bodySize), which is what every card drawn
+  // before this existed renders at.
+  bodyFontSize?: number
   fontFamily?: FontFamily
   title?: string
   // text formatting

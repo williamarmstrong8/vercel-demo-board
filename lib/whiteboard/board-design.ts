@@ -1,25 +1,15 @@
-// Design system for AI-authored boards.
+// Card rendering defaults.
 //
-// Single source of truth shared by the auto-layout (lib/boards/blocks.ts), the
-// card renderer (components/whiteboard/canvas-element.tsx), and the build-board
-// system prompt (app/api/ai/build-board/route.ts) — so the sizes the model is
-// told to use are exactly the sizes the canvas lays out and renders.
+// Shared by the card renderer (components/whiteboard/canvas-element.tsx) and its
+// inline editor (components/whiteboard/element-editor.tsx), which sits directly
+// on top of the renderer and so has to agree with it exactly.
+//
+// These are the values a card falls back to when it doesn't carry its own. An
+// element's `fontSize` overrides the title size and `bodyFontSize` the body size
+// — which is how the board engine's style packs (lib/boards/engine/tokens.ts) set
+// their own card typography without changing what a hand-drawn card looks like.
 
-// Typographic scale for `text` blocks (headings, labels, standalone copy).
-export const TYPE_SCALE = {
-  h1: 40, // board title — one per board
-  h2: 28, // section heading
-  h3: 20, // sub-heading / small label
-  body: 16, // standalone body copy
-} as const
-
-// Card sizing. Cards auto-fit their height; these govern width and font size.
 export const CARD = {
-  width: 260, // standard card
-  wideWidth: 380, // detail-heavy card
   titleSize: 24, // default card title size (override via a block's `fontSize`)
-  bodySize: 18, // card body size
+  bodySize: 18, // default card body size (override via `bodyFontSize`)
 } as const
-
-// Spacing.
-export const ARROW_PAD = 16 // gap between an arrow's ends and the blocks it joins

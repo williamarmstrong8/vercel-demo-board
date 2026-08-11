@@ -77,7 +77,7 @@ export function ElementEditor({ id }: { id: string }) {
     // title: one line at its font size + top/bottom padding (12 + 8)
     grow(textRef.current, Math.round((el.fontSize ?? CARD.titleSize) * 1.34) + 20)
     // description: one line at the body size + bottom padding (14)
-    grow(bodyRef.current, Math.round(CARD.bodySize * 1.5) + 14)
+    grow(bodyRef.current, Math.round((el.bodyFontSize ?? CARD.bodySize) * 1.5) + 14)
   }, [el, id])
 
   if (!el) return null
@@ -307,7 +307,11 @@ export function ElementEditor({ id }: { id: string }) {
           resize: "none",
           padding: "0 16px 14px",
           fontFamily: fontStack(el.fontFamily),
-          fontSize: CARD.bodySize,
+          // Must match CardView's body size exactly — this textarea sits directly
+          // on top of the view it replaces, so any disagreement shows up as the
+          // text jumping the moment you start or stop typing, and as a wrong
+          // auto-height, since the card measures whichever one is mounted.
+          fontSize: el.bodyFontSize ?? CARD.bodySize,
           lineHeight: 1.5,
           color: "#444",
           background: "transparent",
