@@ -5,6 +5,9 @@ import { useWhiteboard } from "@/lib/whiteboard/store"
 import { getBounds } from "@/lib/whiteboard/geometry"
 import { getCodeTheme } from "@/lib/whiteboard/code-themes"
 import { CARD } from "@/lib/whiteboard/board-design"
+import { fontStack } from "@/lib/whiteboard/fonts"
+import { themeFilterFor } from "@/lib/whiteboard/theme-filter"
+import { useSiteTheme } from "@/components/site-theme"
 
 export function ElementEditor({ id }: { id: string }) {
   const el = useWhiteboard((s) =>
@@ -12,6 +15,9 @@ export function ElementEditor({ id }: { id: string }) {
   )
   const update = useWhiteboard((s) => s.update)
   const setEditing = useWhiteboard((s) => s.setEditing)
+  // Same recolour the canvas view applies (see CanvasElementView). Without it
+  // the text would jump from white to black the instant editing starts.
+  const { theme } = useSiteTheme()
   const settled = useRef(false)
 
   const textRef = useRef<HTMLTextAreaElement>(null)
@@ -114,7 +120,7 @@ export function ElementEditor({ id }: { id: string }) {
           fontSize: el.fontSize || 24,
           lineHeight: 1.3,
           color: el.stroke,
-          fontFamily: "var(--font-sans)",
+          fontFamily: fontStack(el.fontFamily),
           fontWeight: el.bold ? 700 : 500,
           fontStyle: el.italic ? "italic" : "normal",
           textDecoration: el.underline ? "underline" : "none",
@@ -128,6 +134,7 @@ export function ElementEditor({ id }: { id: string }) {
           resize: "none",
           overflow: "hidden",
           pointerEvents: "auto",
+          filter: themeFilterFor("text", theme),
         }}
         placeholder="Type something..."
       />
@@ -241,6 +248,7 @@ export function ElementEditor({ id }: { id: string }) {
         flexDirection: "column",
         overflow: "hidden",
         pointerEvents: "auto",
+        filter: themeFilterFor("card", theme),
       }}
     >
       <textarea
@@ -269,7 +277,7 @@ export function ElementEditor({ id }: { id: string }) {
           // padding + font + line-height + wrapping match CardView's title div
           // exactly — any mismatch reads as the text jumping when edit starts
           padding: "12px 16px 8px",
-          fontFamily: "var(--font-sans)",
+          fontFamily: fontStack(el.fontFamily),
           fontWeight: 600,
           fontSize: el.fontSize ?? CARD.titleSize,
           lineHeight: 1.34,
@@ -298,7 +306,7 @@ export function ElementEditor({ id }: { id: string }) {
           outline: "none",
           resize: "none",
           padding: "0 16px 14px",
-          fontFamily: "var(--font-sans)",
+          fontFamily: fontStack(el.fontFamily),
           fontSize: CARD.bodySize,
           lineHeight: 1.5,
           color: "#444",

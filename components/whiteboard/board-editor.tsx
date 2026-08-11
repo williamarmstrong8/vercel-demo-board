@@ -6,8 +6,8 @@ import { Toolbar } from "@/components/whiteboard/toolbar"
 import { PropertiesPanel } from "@/components/whiteboard/properties-panel"
 import { ZoomControls } from "@/components/whiteboard/zoom-controls"
 import { BoardTopBar } from "@/components/whiteboard/board-top-bar"
+import { BoardBackgroundMenu } from "@/components/whiteboard/board-background-menu"
 import { SiteThemeProvider } from "@/components/site-theme"
-import { ThemeToggle } from "@/components/theme-toggle"
 import {
   useWhiteboard,
   enableCloudDraft,
@@ -40,6 +40,7 @@ function beaconFlush(boardId: string, project: Project) {
     data: {
       elements: project.elements,
       camera: project.camera,
+      backgroundStyle: project.backgroundStyle,
     },
   })
   navigator.sendBeacon("/api/boards/flush", new Blob([payload], { type: "application/json" }))
@@ -59,6 +60,7 @@ export function BoardEditor({
 }) {
   const loadBoard = useWhiteboard((s) => s.loadBoard)
   const setReadOnly = useWhiteboard((s) => s.setReadOnly)
+  const libraryOpen = useWhiteboard((s) => s.libraryOpen)
   const [ready, setReady] = useState(false)
   const [loadError, setLoadError] = useState(false)
   const revisionRef = useRef(0)
@@ -79,6 +81,7 @@ export function BoardEditor({
       data: {
         elements: pending.project.elements,
         camera: pending.project.camera,
+        backgroundStyle: pending.project.backgroundStyle,
       },
     })
       .then(() => {
@@ -131,6 +134,7 @@ export function BoardEditor({
             name: board.name,
             elements: board.data.elements ?? [],
             camera: board.data.camera ?? { x: 0, y: 0, zoom: 1 },
+            backgroundStyle: board.data.backgroundStyle ?? "plain",
             createdAt: new Date(board.updatedAt).getTime(),
             updatedAt: new Date(board.updatedAt).getTime(),
           }
@@ -256,6 +260,14 @@ export function BoardEditor({
               initiallyStarred={board?.isStarred ?? false}
             />
           </div>
+
+          {/* Top-right: board settings. Theme is a viewer preference so it's
+              always available; background style is a board-editing decision,
+              so BoardBackgroundMenu hides that section for a read-only
+              viewer but keeps the menu itself (and Theme) around. */}
+          <div className="pointer-events-auto">
+            <BoardBackgroundMenu canEdit={canEdit} />
+          </div>
         </div>
 
         {/* Top-center: toolbar. Drawing tools and the properties panel are the
@@ -275,14 +287,19 @@ export function BoardEditor({
           </>
         )}
 
-        {/* Bottom-left: zoom + theme toggle */}
-        <div className="pointer-events-none absolute bottom-3 left-3 z-30">
+        {/* Bottom-left: zoom controls. The component library modal is rendered
+            inside the toolbar's z-30 stacking context (fixed z-50 only wins
+            within that context). This bar used to share z-30 and sit later in
+            the DOM, so it painted ABOVE the modal's backdrop and stayed
+            sharp while the earlier top-left chrome correctly went soft. Drop
+            under the toolbar while the library is open so the backdrop covers
+            and blurs us the same way; `inert` still keeps Tab focus out. */}
+        <div
+          className={`pointer-events-none absolute bottom-3 left-3 ${libraryOpen ? "z-20" : "z-30"}`}
+          inert={libraryOpen}
+        >
           <div className="pointer-events-auto flex items-center gap-2">
             <ZoomControls />
-            {/* Also permanently dark tool chrome — same reasoning as ZoomControls. */}
-            <div className="dark flex items-center rounded-xl border border-border bg-card/90 p-1 backdrop-blur-md">
-              <ThemeToggle />
-            </div>
           </div>
         </div>
       </main>

@@ -2,6 +2,7 @@ import type { CanvasElement, Tool } from "./types"
 import { uid } from "./store"
 import { AGENT_STRUCTURES } from "./eve-templates"
 import { DEFAULT_GATEWAY_MODEL } from "./ai-gateway-models"
+import { DEFAULT_CONNECT_TYPE } from "./connect-providers"
 import { DEFAULT_DB_ENGINE } from "./db-engines"
 
 export const DEFAULT_STROKE = "#171717"
@@ -34,9 +35,12 @@ function defaultStroke() {
 // Shapes (rectangle/ellipse/diamond) share one memory bucket, connectors
 // (arrow/line) share another, and cards get their own — matching how a user
 // thinks about "shape style" vs "line style" vs "card style".
-type StyleMemoryGroup = "shape" | "connector" | "card"
+type StyleMemoryGroup = "shape" | "connector" | "card" | "text"
 export type StyleOverride = Partial<
-  Pick<CanvasElement, "stroke" | "fill" | "strokeWidth" | "strokeStyle" | "sloppiness" | "rounded">
+  Pick<
+    CanvasElement,
+    "stroke" | "fill" | "strokeWidth" | "strokeStyle" | "fillStyle" | "sloppiness" | "rounded" | "fontFamily"
+  >
 >
 
 const STYLE_MEMORY_GROUPS: Partial<Record<CanvasElement["type"], StyleMemoryGroup>> = {
@@ -46,6 +50,7 @@ const STYLE_MEMORY_GROUPS: Partial<Record<CanvasElement["type"], StyleMemoryGrou
   arrow: "connector",
   line: "connector",
   card: "card",
+  text: "text",
 }
 const styleMemory: Partial<Record<StyleMemoryGroup, StyleOverride>> = {}
 
@@ -106,6 +111,7 @@ export function createElement(
         fontSize: 24,
         fill: "transparent",
         stroke: defaultStroke(),
+        ...styleMemory.text,
       }
     case "card":
       return {
@@ -188,6 +194,18 @@ export function createElement(
         width: 440,
         height: 360,
         gatewayModel: DEFAULT_GATEWAY_MODEL,
+        fill: "#0a0a0a",
+        stroke: "#2e2e2e",
+        strokeWidth: 1,
+        rounded: true,
+      }
+    case "connect":
+      return {
+        ...base,
+        type: "connect",
+        width: 440,
+        height: 320,
+        connectType: DEFAULT_CONNECT_TYPE,
         fill: "#0a0a0a",
         stroke: "#2e2e2e",
         strokeWidth: 1,

@@ -2,6 +2,7 @@ import { z } from "zod"
 import type { AgentFile, CanvasElement, ElementType } from "@/lib/whiteboard/types"
 import { AGENT_STRUCTURES } from "@/lib/whiteboard/eve-templates"
 import { DEFAULT_GATEWAY_MODEL } from "@/lib/whiteboard/ai-gateway-models"
+import { DEFAULT_CONNECT_TYPE } from "@/lib/whiteboard/connect-providers"
 import { DEFAULT_DB_ENGINE } from "@/lib/whiteboard/db-engines"
 import { CARD, ARROW_PAD } from "@/lib/whiteboard/board-design"
 import { uid } from "./service"
@@ -33,6 +34,7 @@ export const AUTHORABLE_BLOCK_TYPES = [
   "database",
   "filetree",
   "aigateway",
+  "connect",
   "ec2",
   "fluidcompute",
   "serverlesscompute",
@@ -68,6 +70,10 @@ export const blockSchema = z.object({
     .string()
     .optional()
     .describe("aigateway blocks only. AI Gateway id in `creator/model` form."),
+  connectType: z
+    .string()
+    .optional()
+    .describe("connect blocks only. Connection type id (oauth-app, mcp, custom-oauth, api-key)."),
   agentName: z.string().optional().describe("filetree blocks only."),
   files: z
     .array(z.object({ name: z.string(), code: z.string() }))
@@ -195,6 +201,13 @@ function defaultsFor(type: ElementType): Defaults {
     }
     case "aigateway":
       return { ...DARK_PANEL, width: 440, height: 360, gatewayModel: DEFAULT_GATEWAY_MODEL }
+    case "connect":
+      return {
+        ...DARK_PANEL,
+        width: 440,
+        height: 320,
+        connectType: DEFAULT_CONNECT_TYPE,
+      }
     case "ec2":
       return {
         ...DARK_PANEL,

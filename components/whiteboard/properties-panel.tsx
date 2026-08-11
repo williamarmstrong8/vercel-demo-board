@@ -17,20 +17,38 @@ import {
   ChevronRight,
   ChevronLeft,
   Check,
+  ShieldCheck,
+  Radio,
+  Globe,
+  KeyRound,
 } from "lucide-react"
 import { useWhiteboard } from "@/lib/whiteboard/store"
-import type { CanvasElement, CodeThemeId, Sloppiness, StrokeStyle } from "@/lib/whiteboard/types"
+import type { CanvasElement, CodeThemeId, FillStyle, FontFamily, Sloppiness, StrokeStyle } from "@/lib/whiteboard/types"
+import { STROKE_WIDTHS } from "@/lib/whiteboard/types"
+import { FONT_FAMILIES, FONT_LABELS, fontStack } from "@/lib/whiteboard/fonts"
 import { CODE_THEMES } from "@/lib/whiteboard/code-themes"
 import { CODE_PRESETS } from "@/lib/whiteboard/code-presets"
 import { AGENT_STRUCTURES, EVE_ADD_CATEGORIES, EVE_CHANNELS, type EveStructureTemplate } from "@/lib/whiteboard/eve-templates"
 import { DB_ENGINES, DEFAULT_DB_ENGINE } from "@/lib/whiteboard/db-engines"
+import { CONNECT_TYPES, DEFAULT_CONNECT_TYPE } from "@/lib/whiteboard/connect-providers"
 import { rememberElementStyle, type StyleOverride } from "@/lib/whiteboard/factory"
+import { DARK_THEME_FILTER } from "@/lib/whiteboard/theme-filter"
+import { useSiteTheme } from "@/components/site-theme"
 import { cn } from "@/lib/utils"
 
 // Properties this panel treats as "carry forward to the next shape/card you
 // draw" — a subset of Partial<CanvasElement> kept in sync with
 // factory.ts's StyleOverride.
-const STYLE_MEMORY_KEYS = ["stroke", "fill", "strokeWidth", "strokeStyle", "sloppiness", "rounded"] as const
+const STYLE_MEMORY_KEYS = [
+  "stroke",
+  "fill",
+  "strokeWidth",
+  "strokeStyle",
+  "fillStyle",
+  "sloppiness",
+  "rounded",
+  "fontFamily",
+] as const
 
 // 3 shades per hue: dark -> mid -> light (rendered column-major, so each
 // column reads dark at the top down to light at the bottom)
@@ -65,10 +83,23 @@ const SLOPPINESS_LABELS: Record<Sloppiness, string> = {
   2: "Very sketchy",
 }
 
+const FILL_STYLE_LABELS: Record<FillStyle, string> = {
+  hachure: "Hachure",
+  "cross-hatch": "Cross-hatch",
+  solid: "Solid",
+}
+
 const STROKE_STYLE_LABELS: Record<StrokeStyle, string> = {
   solid: "Solid",
   dashed: "Dashed",
   dotted: "Dotted",
+}
+
+const CONNECT_TYPE_ICONS: Record<string, typeof ShieldCheck> = {
+  "oauth-app": ShieldCheck,
+  mcp: Radio,
+  "custom-oauth": Globe,
+  "api-key": KeyRound,
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -96,6 +127,11 @@ export function PropertiesPanel() {
   const dup = useWhiteboard((s) => s.duplicateSelected)
   const front = useWhiteboard((s) => s.bringToFront)
   const back = useWhiteboard((s) => s.sendToBack)
+  // The canvas recolours a dark-theme board's shapes (see theme-filter.ts), so
+  // the swatches preview the same transform — otherwise picking the black chip
+  // on a dark board would visibly draw a white stroke.
+  const { theme } = useSiteTheme()
+  const swatchFilter = theme === "dark" ? DARK_THEME_FILTER : undefined
   // For a custom agent the menu shows the "add capabilities" view; this lets the
   // user pop back to the template picker without leaving the custom structure.
   const [browsingTemplates, setBrowsingTemplates] = useState(false)
@@ -296,8 +332,8 @@ export function PropertiesPanel() {
     )
   }
 
-  // Workflow nodes (code / terminal / server / database) get a dedicated menu.
-  const isNode = ["code", "terminal", "server", "database"].includes(first.type)
+  // Showcase / workflow nodes get a dedicated menu (connection type, engine, …).
+  const isNode = ["code", "terminal", "server", "database", "connect"].includes(first.type)
   if (isNode && selected.length === 1) {
     return (
       <div className="dark pointer-events-auto flex max-h-full w-60 flex-col overflow-hidden rounded-xl border border-border bg-card text-foreground">
@@ -415,6 +451,46 @@ export function PropertiesPanel() {
           </>
         )}
 
+        {first.type === "connect" && (
+          <Section title="Connection type">
+            <div className="flex flex-col gap-1.5">
+              {CONNECT_TYPES.map((connectType) => {
+                const active = (first.connectType ?? DEFAULT_CONNECT_TYPE) === connectType.id
+                const Icon = CONNECT_TYPE_ICONS[connectType.id] ?? ShieldCheck
+                return (
+                  <button
+                    key={connectType.id}
+                    onClick={() => updateWithHistory(ids, { connectType: connectType.id })}
+                    className={cn(
+                      "flex items-start gap-2.5 rounded-md border px-2.5 py-2 text-left transition-colors",
+                      active
+                        ? "border-foreground bg-muted"
+                        : "border-border hover:border-foreground/40 hover:bg-muted",
+                    )}
+                  >
+                    <Icon
+                      size={14}
+                      className="mt-0.5 shrink-0"
+                      style={{ color: connectType.accent }}
+                    />
+                    <span className="flex min-w-0 flex-col gap-0.5">
+                      <span className="flex items-center gap-2">
+                        <span className="text-xs font-medium">{connectType.label}</span>
+                        <span className="truncate font-mono text-[10px] text-muted-foreground">
+                          {connectType.connector}
+                        </span>
+                      </span>
+                      <span className="text-[10px] leading-snug text-muted-foreground">
+                        {connectType.description}
+                      </span>
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </Section>
+        )}
+
         {first.type === "code" && (
           <Section title="Theme">
             <div className="flex flex-col gap-1.5">
@@ -446,6 +522,9 @@ export function PropertiesPanel() {
   const hasStrokeWidth = selected.some((e) => e.type !== "image" && e.type !== "text")
   const hasFill = selected.some((e) => ["rectangle", "ellipse", "diamond", "card"].includes(e.type))
   const hasText = selected.some((e) => e.type === "text")
+  // the two element kinds whose text is the user's own prose — the specialized
+  // blocks (code, terminal, server, …) keep their fixed panel typography
+  const hasFont = selected.some((e) => e.type === "text" || e.type === "card")
   // only the drawn shapes (and cards, which sketch as a rounded rectangle) are
   // rendered from geometry we can hand-draw
   const hasSloppiness = selected.some((e) => ["rectangle", "ellipse", "diamond", "card"].includes(e.type))
@@ -461,6 +540,14 @@ export function PropertiesPanel() {
   const strokeWidthVal = (common("strokeWidth") as number) ?? 2
   const opacityVal = (common("opacity") as number) ?? 1
   const sloppinessVal = (common("sloppiness") as Sloppiness | undefined) ?? 0
+  const fontFamilyVal = (common("fontFamily") as FontFamily | undefined) ?? "sans"
+  const fillStyleVal = (common("fillStyle") as FillStyle | undefined) ?? "solid"
+  // Boards can carry any stroke width (templates and the AI builder set their
+  // own), so the picker highlights whichever preset that width is closest to
+  // rather than leaving every legacy shape showing no selection at all.
+  const activeWidth = STROKE_WIDTHS.reduce((best, w) =>
+    Math.abs(w.value - strokeWidthVal) < Math.abs(best.value - strokeWidthVal) ? w : best,
+  ).value
   const roundedVal = common("rounded") as boolean | undefined
   const strokeStyleVal = (common("strokeStyle") as StrokeStyle | undefined) ?? "solid"
 
@@ -507,7 +594,7 @@ export function PropertiesPanel() {
               <NoStrokeSwatch active={currentStroke === NO_STROKE} onClick={() => updateWithHistory(ids, { stroke: NO_STROKE })} />
             )}
             {isCustomStroke && (
-              <CustomColorSwatch value={currentStroke!} onChange={(v) => setStrokeColor(v, false)} onStart={beginInteraction} />
+              <CustomColorSwatch value={currentStroke!} onChange={(v) => setStrokeColor(v, false)} onStart={beginInteraction} filter={swatchFilter} />
             )}
             <ColorInput
               value={currentStroke && currentStroke.startsWith("#") ? currentStroke : DEFAULT_STROKE_COLOR}
@@ -523,7 +610,7 @@ export function PropertiesPanel() {
               <div className="grid grid-cols-6 grid-flow-col grid-rows-3 gap-1.5">
                 {STROKE_COLORS.map((shades) =>
                   shades.map((c) => (
-                    <Swatch key={c} color={c} active={currentStroke === c} onClick={() => setStrokeColor(c, true)} />
+                    <Swatch key={c} color={c} active={currentStroke === c} onClick={() => setStrokeColor(c, true)} filter={swatchFilter} />
                   )),
                 )}
               </div>
@@ -541,7 +628,7 @@ export function PropertiesPanel() {
               <div className="flex flex-col gap-1.5">
                 <NoStrokeSwatch active={currentFill === "transparent"} onClick={() => updateWithHistory(ids, { fill: "transparent" })} />
                 {isCustomFill && (
-                  <CustomColorSwatch value={currentFill!} onChange={(v) => update(ids, { fill: v })} onStart={beginInteraction} />
+                  <CustomColorSwatch value={currentFill!} onChange={(v) => update(ids, { fill: v })} onStart={beginInteraction} filter={swatchFilter} />
                 )}
                 <ColorInput
                   value={currentFill && currentFill.startsWith("#") ? currentFill : "#ffffff"}
@@ -552,45 +639,67 @@ export function PropertiesPanel() {
               <div className="grid grid-cols-6 grid-flow-col grid-rows-3 gap-1.5">
                 {FILL_COLORS.map((shades) =>
                   shades.map((c) => (
-                    <Swatch key={c} color={c} active={currentFill === c} onClick={() => updateWithHistory(ids, { fill: c })} />
+                    <Swatch key={c} color={c} active={currentFill === c} onClick={() => updateWithHistory(ids, { fill: c })} filter={swatchFilter} />
                   )),
                 )}
               </div>
             </div>
+            {currentFill !== "transparent" && (
+              <div className="mt-2.5 flex gap-1.5">
+                {(["hachure", "cross-hatch", "solid"] as FillStyle[]).map((style) => (
+                  <OptionBtn
+                    key={style}
+                    title={FILL_STYLE_LABELS[style]}
+                    active={fillStyleVal === style}
+                    onClick={() => updateWithHistory(ids, { fillStyle: style })}
+                  >
+                    <FillStyleIcon style={style} />
+                  </OptionBtn>
+                ))}
+              </div>
+            )}
           </Section>
         )
       })()}
 
-      {(hasStrokeWidth || hasText) && (
+      {hasFont && (
+        <Section title="Font">
+          <div className="flex gap-1.5">
+            {FONT_FAMILIES.map((family) => (
+              <OptionBtn
+                key={family}
+                title={FONT_LABELS[family]}
+                active={fontFamilyVal === family}
+                onClick={() => updateWithHistory(ids, { fontFamily: family })}
+              >
+                <span style={{ fontFamily: fontStack(family) }} className="text-sm leading-none">
+                  Ag
+                </span>
+              </OptionBtn>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {hasStrokeWidth && (
+        <Section title="Stroke width">
+          <div className="flex gap-1.5">
+            {STROKE_WIDTHS.map((w) => (
+              <OptionBtn
+                key={w.value}
+                title={w.label}
+                active={strokeWidthVal > 0 && activeWidth === w.value}
+                onClick={() => setStrokeWidth(w.value, true)}
+              >
+                <StrokeWidthIcon width={w.value} />
+              </OptionBtn>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {hasText && (
       <Section title="Style">
-        {hasStrokeWidth && (
-          <Row label="Stroke width">
-            <div className="flex flex-1 items-center gap-2">
-              <input
-                type="range"
-                min={0}
-                max={12}
-                step={1}
-                value={strokeWidthVal}
-                onPointerDown={beginInteraction}
-                onChange={(e) => setStrokeWidth(Number(e.target.value), false)}
-                className="wb-range"
-              />
-              <input
-                type="number"
-                min={0}
-                max={12}
-                value={Math.round(strokeWidthVal)}
-                onFocus={beginInteraction}
-                onChange={(e) => {
-                  const n = Number(e.target.value)
-                  if (!Number.isNaN(n)) setStrokeWidth(Math.max(0, Math.min(12, Math.round(n))), false)
-                }}
-                className="h-6 w-9 shrink-0 rounded-md border border-border bg-background text-center text-[11px] tabular-nums text-foreground outline-none focus:border-foreground/40"
-              />
-            </div>
-          </Row>
-        )}
         {hasText && (
           <Row label="Font size">
             <NumberInput
@@ -843,6 +952,7 @@ function labelFor(el: CanvasElement) {
     database: "Database",
     image: "Image",
     filetree: "eve agent",
+    connect: "Vercel Connect",
   }
   return map[el.type] ?? "Element"
 }
@@ -967,6 +1077,41 @@ function SloppinessIcon({ level }: { level: Sloppiness }) {
   )
 }
 
+// A rounded tile showing how the fill is painted, clipped so the hatching
+// stops at the tile's edge the way it stops at a shape's outline.
+function FillStyleIcon({ style }: { style: FillStyle }) {
+  const id = `fs-${style}`
+  return (
+    <svg viewBox="0 0 16 16" className="size-4" fill="none" stroke="currentColor" strokeWidth={1.1}>
+      <clipPath id={id}>
+        <rect x={2} y={2} width={12} height={12} rx={3} />
+      </clipPath>
+      {style === "solid" ? (
+        <rect x={2} y={2} width={12} height={12} rx={3} fill="currentColor" stroke="none" />
+      ) : (
+        <g clipPath={`url(#${id})`}>
+          {[-8, -4, 0, 4, 8].map((o) => (
+            <line key={`a${o}`} x1={2 + o} y1={14} x2={14 + o} y2={2} />
+          ))}
+          {style === "cross-hatch" &&
+            [-8, -4, 0, 4, 8].map((o) => <line key={`b${o}`} x1={2 + o} y1={2} x2={14 + o} y2={14} />)}
+        </g>
+      )}
+      <rect x={2} y={2} width={12} height={12} rx={3} />
+    </svg>
+  )
+}
+
+// Three lines at the real relative weights, so the choice reads as thickness
+// rather than as three identical icons with different labels.
+function StrokeWidthIcon({ width }: { width: number }) {
+  return (
+    <svg viewBox="0 0 16 16" className="size-4" fill="none" stroke="currentColor" strokeLinecap="round">
+      <line x1={3} y1={8} x2={13} y2={8} strokeWidth={width * 0.7} />
+    </svg>
+  )
+}
+
 function LineStyleIcon({ style }: { style: StrokeStyle }) {
   const dasharray = style === "dashed" ? "3.5 2.5" : style === "dotted" ? "0.5 2.5" : undefined
   return (
@@ -998,17 +1143,31 @@ function IconBtn({ children, title, onClick }: { children: React.ReactNode; titl
   )
 }
 
-function Swatch({ color, active, onClick }: { color: string; active: boolean; onClick: () => void }) {
+// The colour chip lives in an inner span so the theme filter recolours the
+// swatch to match what the canvas will actually draw, without dragging the
+// selection ring along with it.
+function Swatch({
+  color,
+  active,
+  onClick,
+  filter,
+}: {
+  color: string
+  active: boolean
+  onClick: () => void
+  filter?: string
+}) {
   return (
     <button
       onClick={onClick}
       className={cn(
-        "size-6 rounded-md border transition-transform hover:scale-110",
+        "size-6 overflow-hidden rounded-md border transition-transform hover:scale-110",
         active ? "ring-2 ring-foreground ring-offset-1 ring-offset-card" : "border-border",
       )}
-      style={{ background: color }}
       title={color}
-    />
+    >
+      <span className="block size-full" style={{ background: color, filter }} />
+    </button>
   )
 }
 
@@ -1036,16 +1195,18 @@ function CustomColorSwatch({
   value,
   onChange,
   onStart,
+  filter,
 }: {
   value: string
   onChange: (v: string) => void
   onStart: () => void
+  filter?: string
 }) {
   return (
     <label
       title={value}
       className="relative size-6 shrink-0 cursor-pointer overflow-hidden rounded-md border border-transparent ring-2 ring-foreground ring-offset-1 ring-offset-card transition-transform hover:scale-110"
-      style={{ background: value }}
+      style={{ background: value, filter }}
     >
       <input
         type="color"

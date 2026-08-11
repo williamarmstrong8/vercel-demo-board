@@ -16,6 +16,7 @@ export type Tool =
   | "filetree"
   | "channelui"
   | "aigateway"
+  | "connect"
   | "ec2"
   | "fluidcompute"
   | "serverlesscompute"
@@ -39,6 +40,7 @@ export type ElementType =
   | "channelui"
   | "sandbox"
   | "aigateway"
+  | "connect"
   | "ec2"
   | "fluidcompute"
   | "serverlesscompute"
@@ -67,6 +69,25 @@ export type DbEngine = "postgres" | "mysql" | "redis" | "mongodb"
 // shapes, lines/arrows, and card borders — anything with a stroke width.
 export type StrokeStyle = "solid" | "dashed" | "dotted"
 
+// How a shape's fill is painted: flat colour, or drawn in as pen hatching.
+// Undefined means "solid" everywhere it's read, so boards saved before this
+// existed keep the flat fill they were drawn with.
+export type FillStyle = "solid" | "hachure" | "cross-hatch"
+
+// Stroke widths offered in the properties panel. Stored as a plain number (so
+// AI- and template-authored boards can still specify anything), but the UI
+// picks from these three and matches an arbitrary value to the nearest one.
+export const STROKE_WIDTHS = [
+  { label: "Small", value: 2 },
+  { label: "Medium", value: 3 },
+  { label: "Large", value: 6 },
+] as const
+
+// Typeface for element text (text blocks and card title/body). Undefined means
+// "sans" everywhere it's read, so boards saved before this existed keep the
+// look they were drawn with.
+export type FontFamily = "sans" | "hand" | "mono"
+
 // Ephemeral run phase for a node during a workflow run (not persisted).
 export type RunPhase = "running" | "done"
 
@@ -86,9 +107,11 @@ export interface CanvasElement {
   rounded: boolean
   sloppiness?: Sloppiness
   strokeStyle?: StrokeStyle
+  fillStyle?: FillStyle
   // text / card
   text?: string
   fontSize?: number
+  fontFamily?: FontFamily
   title?: string
   // text formatting
   textAlign?: "left" | "center" | "right"
@@ -118,6 +141,11 @@ export interface CanvasElement {
   // AI Gateway block: the currently-selected model string in `creator/model`
   // form. Swapping it is the "one line of code" the block showcases.
   gatewayModel?: string
+  // Vercel Connect block: the currently-selected connection type id from
+  // connect-providers.ts (oauth-app, mcp, custom-oauth, api-key). Swapping it
+  // swaps the whole init sample — the fundamental `getToken(...)` call for
+  // that connection type.
+  connectType?: string
   // illustrative compute comparison blocks. Runtime counters derive from these
   // stable values; animation ticks are intentionally never persisted.
   spendStart?: number
@@ -161,6 +189,11 @@ export interface Camera {
   zoom: number
 }
 
+// The canvas paper pattern behind a board's elements. Undefined (on boards
+// saved before this existed) is treated the same as "plain" everywhere it's
+// read, so old boards render exactly as they always have.
+export type BackgroundStyle = "plain" | "dots" | "grid"
+
 export interface Project {
   id: string
   name: string
@@ -168,6 +201,7 @@ export interface Project {
   updatedAt: number
   elements: CanvasElement[]
   camera: Camera
+  backgroundStyle?: BackgroundStyle
 }
 
 export const GRID_SIZE = 20

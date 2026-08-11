@@ -1,17 +1,25 @@
 "use client"
 
 import { memo, useState, useLayoutEffect, useEffect, useRef, useMemo } from "react"
-import { Play, Loader2, RotateCw, ChevronDown, ChevronRight, Folder, FileText, SquareTerminal, ExternalLink, Waypoints, Server, Database, Send, Zap } from "lucide-react"
+import { Play, Loader2, RotateCw, ChevronDown, ChevronRight, Folder, FileText, SquareTerminal, ExternalLink, Waypoints, Cable, Server, Database, Send, Zap, ShieldCheck, Radio, Globe, KeyRound } from "lucide-react"
 import type { AgentFile, CanvasElement, RunPhase } from "@/lib/whiteboard/types"
 import { getBounds } from "@/lib/whiteboard/geometry"
 import { getCodeTheme, tokenizeLine } from "@/lib/whiteboard/code-themes"
 import { sketchShape, type SketchShapeType } from "@/lib/whiteboard/sketch"
+import { fontStack } from "@/lib/whiteboard/fonts"
+import { themeFilterFor } from "@/lib/whiteboard/theme-filter"
+import { useSiteTheme } from "@/components/site-theme"
 import { CARD } from "@/lib/whiteboard/board-design"
 import { createElement } from "@/lib/whiteboard/factory"
 import { useWhiteboard } from "@/lib/whiteboard/store"
 import { METHOD_COLORS } from "@/lib/whiteboard/workflow"
 import { channelsForFiles, channelById, type EveChannelMeta } from "@/lib/whiteboard/eve-templates"
 import { GATEWAY_MODELS, gatewayModelById, DEFAULT_GATEWAY_MODEL } from "@/lib/whiteboard/ai-gateway-models"
+import {
+  CONNECT_TYPES,
+  connectTypeById,
+  DEFAULT_CONNECT_TYPE,
+} from "@/lib/whiteboard/connect-providers"
 import { DB_ENGINES, dbEngineById, DEFAULT_DB_ENGINE } from "@/lib/whiteboard/db-engines"
 import { ChannelChat, CHANNEL_UI_SCALE, s } from "@/components/whiteboard/channel-chat"
 import { ScrollBox } from "@/components/whiteboard/scroll-box"
@@ -46,6 +54,8 @@ function useFitHeight(el: CanvasElement, ref: React.RefObject<HTMLDivElement | n
       ro.disconnect()
     }
     // width/text/theme/title/formatting all affect wrapping and therefore height
+    // — including the typeface, since the hand-drawn face sets different glyph
+    // widths and so breaks lines in different places than the sans one
   }, [
     enabled,
     el.id,
@@ -55,6 +65,7 @@ function useFitHeight(el: CanvasElement, ref: React.RefObject<HTMLDivElement | n
     el.codeTheme,
     el.title,
     el.fontSize,
+    el.fontFamily,
     el.bold,
     el.italic,
     el.textAlign,
@@ -70,6 +81,8 @@ export const CanvasElementView = memo(function CanvasElementView({ el }: { el: C
   const active = phase === "running"
   const isSnapTarget = useWhiteboard((s) => s.snapTargetId === el.id)
   const isLinear = el.type === "arrow" || el.type === "line"
+  const { theme } = useSiteTheme()
+  const themeFilter = themeFilterFor(el.type, theme)
   const wrapperStyle: React.CSSProperties = {
     position: "absolute",
     left: b.x,
@@ -98,9 +111,16 @@ export const CanvasElementView = memo(function CanvasElementView({ el }: { el: C
     visibility: editing ? "hidden" : undefined,
   }
 
+  const content = renderContent(el, b, phase)
+
   return (
     <div style={wrapperStyle} data-el-id={el.id}>
-      <div style={inner}>{renderContent(el, b, phase)}</div>
+      {/* The theme filter sits inside `inner` rather than on it, so it recolours
+          the element's own paint without touching the run/snap highlight —
+          that blue is interface feedback and should read the same either way. */}
+      <div style={inner}>
+        {themeFilter ? <div style={{ filter: themeFilter, width: "100%", height: "100%" }}>{content}</div> : content}
+      </div>
       {el.type === "filetree" && <ChannelLogos tree={el} />}
     </div>
   )
@@ -667,6 +687,8 @@ function renderContent(el: CanvasElement, b: { width: number; height: number }, 
       return <SandboxView el={el} />
     case "aigateway":
       return <AiGatewayView el={el} />
+    case "connect":
+      return <ConnectView el={el} />
     case "ec2":
       return <Ec2View el={el} />
   case "fluidcompute":
@@ -713,27 +735,35 @@ function ShapeSvg({ el, b }: { el: CanvasElement; b: { width: number; height: nu
   const sw = noStroke ? 0 : el.strokeWidth
   const w = Math.max(1, b.width)
   const h = Math.max(1, b.height)
-  const fill = el.fill === "transparent" ? "none" : el.fill
   const rx = el.rounded ? Math.min(16, Math.min(w, h) * 0.12) : 0
   const sloppiness = el.sloppiness ?? 0
-  // A sketched shape replaces the crisp geometry below with hand-drawn paths.
+  // A sketched shape replaces the crisp geometry below with hand-drawn paths; a
+  // hatched fill comes from here even on a clean shape, since roughjs is the
+  // only thing that can draw the hatch lines.
   const sketch = useMemo(
     () =>
-      sloppiness === 0
-        ? null
-        : sketchShape({
-            id: el.id,
-            type: el.type as SketchShapeType,
-            width: w,
-            height: h,
-            radius: el.type === "rectangle" ? rx : 0,
-            sloppiness,
-            fill: el.fill,
-            stroke: noStroke ? "transparent" : el.stroke,
-            strokeWidth: sw,
-          }),
-    [sloppiness, el.id, el.type, el.fill, el.stroke, w, h, rx, sw, noStroke],
+      sketchShape({
+        id: el.id,
+        type: el.type as SketchShapeType,
+        width: w,
+        height: h,
+        rounded: !!el.rounded,
+        crispRadius: el.type === "rectangle" ? rx : 0,
+        sloppiness,
+        fill: el.fill,
+        fillStyle: el.fillStyle,
+        stroke: noStroke ? "transparent" : el.stroke,
+        strokeWidth: sw,
+        strokeStyle: el.strokeStyle,
+      }),
+    [sloppiness, el.id, el.type, el.fill, el.fillStyle, el.stroke, w, h, el.rounded, rx, sw, noStroke, el.strokeStyle],
   )
+  // Only a sketched outline replaces the crisp geometry — a clean shape with a
+  // hatched fill keeps its exact rect/ellipse/polygon outline below.
+  const sketchedOutline = sloppiness !== 0
+  // The crisp geometry paints its own flat fill unless the hatch lines above
+  // are already standing in for it.
+  const fill = el.fill === "transparent" || sketch.fill.length > 0 ? "none" : el.fill
   // Stroke is drawn entirely outside the shape (Figma-style "outside" align):
   // a separate stroke-only path is outset by half the stroke width so its
   // own centered stroke band lands fully beyond the fill's edge, and the
@@ -742,19 +772,30 @@ function ShapeSvg({ el, b }: { el: CanvasElement; b: { width: number; height: nu
   const dash = strokeDashArray(el.strokeStyle, sw)
   return (
     <svg width="100%" height="100%" viewBox={`0 0 ${w} ${h}`} style={{ overflow: "visible", display: "block" }}>
-      {sketch?.map((p, i) => (
+      {sketch.fill.map((p, i) => (
         <path
-          key={i}
+          key={`f${i}`}
           d={p.d}
           fill={p.fill}
           stroke={p.stroke}
           strokeWidth={p.strokeWidth}
           strokeLinecap="round"
           strokeLinejoin="round"
-          strokeDasharray={p.stroke !== "none" ? dash : undefined}
         />
       ))}
-      {!sketch && el.type === "rectangle" && (
+      {sketch.stroke.map((p, i) => (
+        <path
+          key={`s${i}`}
+          d={p.d}
+          fill="none"
+          stroke={p.stroke}
+          strokeWidth={p.strokeWidth}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeDasharray={dash}
+        />
+      ))}
+      {!sketchedOutline && el.type === "rectangle" && (
         <>
           {sw > 0 && (
             <rect
@@ -774,7 +815,7 @@ function ShapeSvg({ el, b }: { el: CanvasElement; b: { width: number; height: nu
           <rect x={0} y={0} width={w} height={h} rx={rx} ry={rx} fill={fill} stroke="none" />
         </>
       )}
-      {!sketch && el.type === "ellipse" && (
+      {!sketchedOutline && el.type === "ellipse" && (
         <>
           {sw > 0 && (
             <ellipse
@@ -792,7 +833,7 @@ function ShapeSvg({ el, b }: { el: CanvasElement; b: { width: number; height: nu
           <ellipse cx={w / 2} cy={h / 2} rx={w / 2} ry={h / 2} fill={fill} stroke="none" />
         </>
       )}
-      {!sketch && el.type === "diamond" && (
+      {!sketchedOutline && el.type === "diamond" && (
         <>
           {sw > 0 && (
             <polygon
@@ -883,7 +924,7 @@ function TextView({ el }: { el: CanvasElement }) {
         fontSize,
         lineHeight: 1.3,
         color: el.stroke,
-        fontFamily: "var(--font-sans)",
+        fontFamily: fontStack(el.fontFamily),
         whiteSpace: "pre-wrap",
         wordBreak: "break-word",
         fontWeight: el.bold ? 700 : 500,
@@ -917,21 +958,24 @@ function CardView({ el }: { el: CanvasElement }) {
   // the fill and border stay real content-sized, just wobbly.
   const sketch = useMemo(
     () =>
-      sloppiness === 0
-        ? null
-        : sketchShape({
-            id: el.id,
-            type: "rectangle",
-            width: w,
-            height: h,
-            radius: rx,
-            sloppiness,
-            fill: el.fill,
-            stroke: noStroke ? "transparent" : el.stroke,
-            strokeWidth: noStroke ? 0 : el.strokeWidth,
-          }),
-    [sloppiness, el.id, el.fill, el.stroke, w, h, rx, noStroke, el.strokeWidth],
+      sketchShape({
+        id: el.id,
+        type: "rectangle",
+        width: w,
+        height: h,
+        rounded: !!el.rounded,
+        crispRadius: rx,
+        sloppiness,
+        fill: el.fill,
+        fillStyle: el.fillStyle,
+        stroke: noStroke ? "transparent" : el.stroke,
+        strokeWidth: noStroke ? 0 : el.strokeWidth,
+        strokeStyle: el.strokeStyle,
+      }),
+    [sloppiness, el.id, el.fill, el.fillStyle, el.stroke, w, h, el.rounded, rx, noStroke, el.strokeWidth, el.strokeStyle],
   )
+  const sketchedOutline = sloppiness !== 0
+  const drawn = sketch.fill.length > 0 || sketch.stroke.length > 0
   const dash = strokeDashArray(el.strokeStyle, el.strokeWidth)
   return (
     <div
@@ -940,18 +984,19 @@ function CardView({ el }: { el: CanvasElement }) {
         position: "relative",
         width: "100%",
         borderRadius: rx,
-        background: sketch ? "transparent" : el.fill,
+        // hatch lines stand in for the flat background once they're drawn
+        background: sketchedOutline || sketch.fill.length > 0 ? "transparent" : el.fill,
         // outline (not border) so the stroke draws outside the fill's box
         // instead of shrinking it — matches ShapeSvg's outside-stroke.
-        outline: sketch || noStroke ? "none" : `${el.strokeWidth}px ${el.strokeStyle ?? "solid"} ${el.stroke}`,
+        outline: sketchedOutline || noStroke ? "none" : `${el.strokeWidth}px ${el.strokeStyle ?? "solid"} ${el.stroke}`,
         outlineOffset: 0,
         boxShadow: "none",
         display: "flex",
         flexDirection: "column",
-        overflow: sketch ? "visible" : undefined,
+        overflow: drawn ? "visible" : undefined,
       }}
     >
-      {sketch && (
+      {drawn && (
         <svg
           width="100%"
           height="100%"
@@ -959,16 +1004,27 @@ function CardView({ el }: { el: CanvasElement }) {
           preserveAspectRatio="none"
           style={{ position: "absolute", inset: 0, overflow: "visible", pointerEvents: "none" }}
         >
-          {sketch.map((p, i) => (
+          {sketch.fill.map((p, i) => (
             <path
-              key={i}
+              key={`f${i}`}
               d={p.d}
               fill={p.fill}
               stroke={p.stroke}
               strokeWidth={p.strokeWidth}
               strokeLinecap="round"
               strokeLinejoin="round"
-              strokeDasharray={p.stroke !== "none" ? dash : undefined}
+            />
+          ))}
+          {sketch.stroke.map((p, i) => (
+            <path
+              key={`s${i}`}
+              d={p.d}
+              fill="none"
+              stroke={p.stroke}
+              strokeWidth={p.strokeWidth}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray={dash}
             />
           ))}
         </svg>
@@ -984,7 +1040,7 @@ function CardView({ el }: { el: CanvasElement }) {
           // Title-only cards (labeled flow/diagram nodes) get symmetric padding
           // instead of leaving room for a body.
           padding: showBody ? "12px 16px 8px" : "12px 16px",
-          fontFamily: "var(--font-sans)",
+          fontFamily: fontStack(el.fontFamily),
           fontWeight: 600,
           fontSize: titleSize,
           lineHeight: 1.34,
@@ -1001,7 +1057,7 @@ function CardView({ el }: { el: CanvasElement }) {
           style={{
             position: "relative",
             padding: "0 16px 14px",
-            fontFamily: "var(--font-sans)",
+            fontFamily: fontStack(el.fontFamily),
             fontSize: CARD.bodySize,
             lineHeight: 1.5,
             color: el.text ? "#444" : "#9ca3af",
@@ -2494,6 +2550,260 @@ function AiGatewayView({ el }: { el: CanvasElement }) {
                   }}
                 />
                 {m.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Icon per connection type, since these are generic categories rather than
+// brands with logos of their own.
+const CONNECT_TYPE_ICONS: Record<string, typeof ShieldCheck> = {
+  "oauth-app": ShieldCheck,
+  mcp: Radio,
+  "custom-oauth": Globe,
+  "api-key": KeyRound,
+}
+
+// Lightweight highlighter for the Connect showcase samples. Colors match the
+// other dark code blocks; the connector uid (or other `highlight` needle) is
+// painted in the accent color so the distinctive bit of each sample pops.
+function renderConnectCodeLine(line: string, accent: string, highlight: string) {
+  const kw = "#ff7b72"
+  const fn = "#79c0ff"
+  const str = "#a5d6ff"
+  const plain = "#c9d1d9"
+  const muted = "#8b949e"
+  const trimmed = line.trimStart()
+  if (trimmed.startsWith("//")) {
+    return <span style={{ color: muted }}>{line}</span>
+  }
+
+  const parts: React.ReactNode[] = []
+  const pattern =
+    /(\/\/.*$|`(?:\\.|[^`])*`|'(?:\\.|[^'])*'|"(?:\\.|[^"])*"|\b(?:import|from|const|await|try|catch|if|instanceof|export|default|return|new|typeof)\b|\b(?:getToken|getTokenResponse|UserAuthorizationRequiredError|fetch|JSON)\b|[A-Za-z_][\w./-]*)/g
+  let last = 0
+  let match: RegExpExecArray | null
+  let key = 0
+  while ((match = pattern.exec(line)) !== null) {
+    if (match.index > last) {
+      parts.push(
+        <span key={key++} style={{ color: plain }}>
+          {line.slice(last, match.index)}
+        </span>,
+      )
+    }
+    const token = match[0]
+    let color = plain
+    if (token.startsWith("//")) color = muted
+    else if (token.startsWith("'") || token.startsWith('"') || token.startsWith("`")) color = str
+    else if (
+      /^(import|from|const|await|try|catch|if|instanceof|export|default|return|new|typeof)$/.test(token)
+    ) {
+      color = kw
+    } else if (/^(getToken|getTokenResponse|UserAuthorizationRequiredError|fetch|JSON)$/.test(token)) {
+      color = fn
+    }
+    if (highlight && token.includes(highlight)) {
+      parts.push(
+        <span key={key++} style={{ color: accent, fontWeight: 600 }}>
+          {token}
+        </span>,
+      )
+    } else {
+      parts.push(
+        <span key={key++} style={{ color }}>
+          {token}
+        </span>,
+      )
+    }
+    last = match.index + token.length
+  }
+  if (last < line.length) {
+    parts.push(
+      <span key={key++} style={{ color: plain }}>
+        {line.slice(last)}
+      </span>,
+    )
+  }
+  return <>{parts}</>
+}
+
+/**
+ * Vercel Connect showcase block. Pills swap between the fundamental
+ * connection types Connect offers — OAuth App, MCP Server, Custom OAuth,
+ * API Key — each showing just the minimal `getToken(...)` call that
+ * initializes that kind of connection. See https://vercel.com/docs/connect
+ */
+function ConnectView({ el }: { el: CanvasElement }) {
+  const update = useWhiteboard((s) => s.update)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [flash, setFlash] = useState(false)
+
+  const typeId = el.connectType || DEFAULT_CONNECT_TYPE
+  const connectType = connectTypeById(typeId) ?? CONNECT_TYPES[0]
+  const lines = connectType.code.split("\n")
+  const Icon = CONNECT_TYPE_ICONS[connectType.id] ?? ShieldCheck
+
+  const mono = { fontFamily: "var(--font-mono)", fontSize: 12, lineHeight: "19px" } as const
+  const muted = "#8b949e"
+
+  useLayoutEffect(() => {
+    const node = contentRef.current
+    if (!node) return
+    let raf = 0
+    const measure = () => {
+      const h = Math.ceil(node.scrollHeight) + 2
+      if (Math.abs(h - el.height) > 1) update([el.id], { height: h })
+    }
+    measure()
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(measure)
+    })
+    ro.observe(node)
+    return () => {
+      cancelAnimationFrame(raf)
+      ro.disconnect()
+    }
+  }, [el.id, el.height, el.width, typeId, update])
+
+  const pickType = (id: string) => {
+    if (id === typeId) return
+    update([el.id], { connectType: id })
+    setFlash(true)
+    window.setTimeout(() => setFlash(false), 700)
+  }
+
+  return (
+    <div
+      ref={contentRef}
+      style={{
+        width: "100%",
+        borderRadius: el.rounded ? 10 : 2,
+        background: "#0a0a0a",
+        border: "1px solid #2e2e2e",
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+        fontFamily: "var(--font-sans)",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "0 12px",
+          height: 38,
+          background: "#141414",
+          borderBottom: "1px solid #1f1f1f",
+          flexShrink: 0,
+        }}
+      >
+        <div style={{ display: "flex", gap: 6 }}>
+          <span style={{ width: 9, height: 9, borderRadius: 9999, background: "#ff5f57" }} />
+          <span style={{ width: 9, height: 9, borderRadius: 9999, background: "#febc2e" }} />
+          <span style={{ width: 9, height: 9, borderRadius: 9999, background: "#28c840" }} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, marginLeft: 4 }}>
+          <Cable size={14} color="#ededed" strokeWidth={2} />
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: "#ededed" }}>Vercel Connect</span>
+        </div>
+        <span style={{ flex: 1 }} />
+        <span
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontFamily: "var(--font-mono)",
+            fontSize: 10,
+            color: "#8a8a8a",
+            border: "1px solid #2a2a2a",
+            borderRadius: 9999,
+            padding: "2px 8px",
+            whiteSpace: "nowrap",
+          }}
+        >
+          <Icon size={10} color={connectType.accent} strokeWidth={2.5} />
+          {connectType.badge}
+        </span>
+      </div>
+
+      <div style={{ padding: "12px 14px", ...mono, color: "#c9d1d9", overflow: "hidden" }}>
+        {lines.map((line, i) => {
+          const isHero = line.includes(connectType.highlight)
+          const isBlank = line.length === 0
+          return (
+            <div
+              key={i}
+              style={
+                isHero
+                  ? {
+                      display: "flex",
+                      alignItems: "center",
+                      margin: "1px -6px",
+                      padding: "1px 6px 1px 3px",
+                      borderLeft: `3px solid ${flash ? "#28c840" : connectType.accent}`,
+                      background: flash ? "rgba(40,200,64,0.14)" : "rgba(255,255,255,0.04)",
+                      borderRadius: 4,
+                      transition: "background 0.5s ease, border-color 0.5s ease",
+                      whiteSpace: "pre",
+                    }
+                  : {
+                      whiteSpace: "pre",
+                      minHeight: isBlank ? 10 : undefined,
+                    }
+              }
+            >
+              {isBlank ? "\u00a0" : renderConnectCodeLine(line, connectType.accent, connectType.highlight)}
+            </div>
+          )
+        })}
+      </div>
+
+      <div style={{ borderTop: "1px solid #1f1f1f", padding: "12px 16px 14px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "#ededed" }}>Connection type</span>
+          <span style={{ fontSize: 11, color: muted }}>— code changes with each</span>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+          {CONNECT_TYPES.map((t) => {
+            const activePill = t.id === connectType.id
+            const PillIcon = CONNECT_TYPE_ICONS[t.id] ?? ShieldCheck
+            return (
+              <button
+                key={t.id}
+                type="button"
+                title={t.description}
+                aria-pressed={activePill}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  pickType(t.id)
+                }}
+                style={{
+                  pointerEvents: "auto",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 7,
+                  padding: "5px 10px",
+                  borderRadius: 8,
+                  cursor: "pointer",
+                  border: `1px solid ${activePill ? t.accent : "#2a2a2a"}`,
+                  background: activePill ? "rgba(255,255,255,0.06)" : "#111",
+                  color: activePill ? "#ededed" : "#b4b4b4",
+                  fontFamily: "var(--font-sans)",
+                  fontSize: 12,
+                  fontWeight: activePill ? 600 : 500,
+                  transition: "border-color 0.15s ease, background 0.15s ease, color 0.15s ease",
+                }}
+              >
+                <PillIcon size={12} color={activePill ? t.accent : "#7a7a7a"} strokeWidth={2.25} />
+                {t.label}
               </button>
             )
           })}

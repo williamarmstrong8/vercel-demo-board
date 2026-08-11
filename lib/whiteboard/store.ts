@@ -1,7 +1,7 @@
 "use client"
 
 import { create } from "zustand"
-import type { CanvasElement, Camera, Project, Tool, RunPhase } from "./types"
+import type { BackgroundStyle, CanvasElement, Camera, Project, Tool, RunPhase } from "./types"
 import { putImage, getImage, deleteImages } from "./image-store"
 
 function uid() {
@@ -24,6 +24,7 @@ function emptyProject(name = "Untitled board"): Project {
     updatedAt: Date.now(),
     elements: [],
     camera: { x: 0, y: 0, zoom: 1 },
+    backgroundStyle: "plain",
   }
 }
 
@@ -157,6 +158,15 @@ interface WhiteboardState {
   // outline can highlight to show the endpoint will snap to it (not persisted)
   snapTargetId: string | null
   runStates: Record<string, RunPhase>
+  // Whether the component/template library modal is open. Lifted up from
+  // component-library.tsx (rather than kept as purely local state there) so
+  // other floating chrome — the bottom-left zoom controls and theme toggle,
+  // which sit outside the modal's own DOM subtree but visually behind its
+  // full-screen backdrop — can go inert while it's up, instead of merely
+  // hoping the backdrop's z-index blocks every input (it blocks the mouse,
+  // but not keyboard Tab focus landing on a control the backdrop is only
+  // painted over).
+  libraryOpen: boolean
 
   // selectors
   current: () => Project
@@ -164,12 +174,14 @@ interface WhiteboardState {
   // lifecycle
   loadBoard: (project: Project) => void
   renameProject: (id: string, name: string) => void
+  setBackgroundStyle: (style: BackgroundStyle) => void
 
   // tool + camera
   setTool: (tool: Tool) => void
   setCamera: (camera: Camera) => void
   setSnapTarget: (id: string | null) => void
   setReadOnly: (readOnly: boolean) => void
+  setLibraryOpen: (open: boolean) => void
 
   // history
   beginInteraction: () => void
@@ -183,6 +195,11 @@ interface WhiteboardState {
   addTemplate: (elements: CanvasElement[]) => void
   removeElements: (ids: string[]) => void
   update: (ids: string[], patch: Partial<CanvasElement>) => void
+  // Apply a *different* patch to each of several elements in a single state
+  // write. A drag or resize that carries N blocks used to call update() N times
+  // per frame — N passes over the element list, N store notifications and N
+  // autosave pokes for one visual change. This does it in one.
+  updateMany: (patches: Record<string, Partial<CanvasElement>>) => void
   updateWithHistory: (ids: string[], patch: Partial<CanvasElement>) => void
   deleteSelected: () => void
   duplicateSelected: () => void
@@ -249,6 +266,7 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
   runStates: {},
   snapTargetId: null,
   readOnly: false,
+  libraryOpen: false,
 
   current: () => {
     const s = get()
@@ -278,6 +296,14 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
     persist(get())
   },
 
+  setBackgroundStyle: (style) => {
+    if (get().readOnly) return
+    set((s) => ({
+      projects: s.projects.map((p) => (p.id === s.currentId ? { ...p, backgroundStyle: style } : p)),
+    }))
+    persist(get())
+  },
+
   setTool: (tool) => set({ tool, pendingTemplate: null, snapTargetId: null }),
 
   setSnapTarget: (id) => set({ snapTargetId: id }),
@@ -285,6 +311,8 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
   // Panning, zooming and selecting stay available in read-only mode — this only
   // gates the actions that would change the board's contents.
   setReadOnly: (readOnly) => set({ readOnly }),
+
+  setLibraryOpen: (open) => set({ libraryOpen: open }),
 
   setCamera: (camera) => {
     set((s) => ({
@@ -375,6 +403,17 @@ export const useWhiteboard = create<WhiteboardState>((set, get) => ({
       const elements = s.current().elements.map((e) =>
         ids.includes(e.id) ? { ...e, ...patch } : e,
       )
+      return writeElements(s, elements) as WhiteboardState
+    })
+    persist(get())
+  },
+
+  updateMany: (patches) => {
+    if (get().readOnly) return
+    const ids = Object.keys(patches)
+    if (ids.length === 0) return
+    set((s) => {
+      const elements = s.current().elements.map((e) => (patches[e.id] ? { ...e, ...patches[e.id] } : e))
       return writeElements(s, elements) as WhiteboardState
     })
     persist(get())

@@ -41,7 +41,7 @@ PICK THE RIGHT BLOCK — do not default to cards:
 - card — a labeled box: a titled concept (title + one to three sentences) OR a labeled node in a flow/diagram (\`title\` only, omit \`text\`). Your default for boxes-with-labels.
 - text — a heading, label, or standalone line (no box). Sizing below.
 - rectangle / ellipse / diamond — UNLABELED shapes only (a colored panel behind a group, a divider, a plain node). They render NO text — never use one where a label must show; use a card.
-- aigateway, ec2, fluidcompute, serverlesscompute, computecomparison, requestdemo — Vercel showcase blocks.
+- aigateway, connect, ec2, fluidcompute, serverlesscompute, computecomparison, requestdemo — Vercel showcase blocks.
 
 DESIGN SYSTEM — use these EXACT sizes so the board has real hierarchy (never one uniform grid of identical cards):
 - Board title: ONE text block at the top, \`fontSize\` 40, bold.
