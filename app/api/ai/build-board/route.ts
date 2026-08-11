@@ -2,10 +2,20 @@ import { gateway, streamText, stepCountIs, tool, type ToolSet } from "ai"
 import { z } from "zod"
 import type { MCPClient } from "@ai-sdk/mcp"
 import * as boards from "@/lib/boards/service"
-import { blockSchema, hydrateBlocks, BlockSpecError } from "@/lib/boards/blocks"
+import {
+  LayoutError,
+  PlanRejectedError,
+  boardPlanSchema,
+  buildBoard,
+  describeBoard,
+  isStyleId,
+  stylePack,
+  type StyleId,
+} from "@/lib/boards/engine"
+import { boardExtensionSchema } from "@/lib/boards/engine/plan"
+import { loadStyleSkill } from "@/lib/boards/engine/skills"
 import { openNotionClient, ConsentRequiredError } from "@/lib/connections/notion"
 import { getCurrentUser } from "@/lib/auth"
-import { TYPE_SCALE, CARD } from "@/lib/whiteboard/board-design"
 import {
   BUILD_STREAM_CONTENT_TYPE,
   type BuildEvent,
@@ -14,14 +24,22 @@ import {
 
 // Chat endpoint that builds Canvas boards from a natural-language conversation.
 //
-// The model authors boards through the `blockSchema` + `hydrateBlocks` path in
-// lib/boards/blocks.ts, so there is exactly one definition of what a "block" is
-// and how it becomes canvas elements.
+// The model authors a semantic PLAN — sections, each with a layout primitive and
+// a list of items — and the structure engine in lib/boards/engine turns that into
+// canvas elements. The model never sees a coordinate, a width, a color or a font
+// size, which is what makes two boards built in the same style actually look like
+// each other.
+//
+// The style is chosen by the user in the builder UI, not inferred here. It
+// selects both the engine's style pack (the geometry and the design tokens) and
+// the authoring skill appended to the system prompt (how to compose a plan for
+// that look), so the guidance the model gets and the rules the engine enforces
+// are always the same style.
 //
 // The response is an NDJSON stream of `BuildEvent`s (lib/ai/build-events.ts).
-// Reading a Notion page and drafting a few dozen blocks routinely takes a
-// minute or more; a buffered JSON response spends that whole time silent, which
-// reads as a hang and gives intermediaries every reason to cut the connection.
+// Reading a Notion page and drafting a plan routinely takes a minute or more; a
+// buffered JSON response spends that whole time silent, which reads as a hang and
+// gives intermediaries every reason to cut the connection.
 //
 // Auth: the AI Gateway provider reads AI_GATEWAY_API_KEY when set and otherwise
 // falls back to the Vercel OIDC token (VERCEL_OIDC_TOKEN, pulled by `vercel dev`
@@ -31,44 +49,30 @@ export const maxDuration = 300
 
 const HEARTBEAT_MS = 10_000
 
-const SYSTEM = `You are the board-building assistant for Canvas, an infinite whiteboard for software architecture diagrams, flows, and product demos. The user describes what they want (and may attach source pages); you build it by calling a tool. Reply in one short sentence — the board is the deliverable.
+/** The part of the prompt that is true regardless of style. */
+function baseSystem(style: StyleId): string {
+  const pack = stylePack(style)
+  return `You are the board-building assistant for Canvas, an infinite whiteboard for software architecture diagrams, flows, write-ups and product demos. The user describes what they want (and may attach source pages); you build it by calling a tool. Reply in one short sentence — the board is the deliverable.
 
-PICK THE RIGHT BLOCK — do not default to cards:
-- code — real source code. \`title\` = filename, \`text\` = the code. Use for ANY code sample.
-- terminal — shell commands or CLI output. \`title\` = shell name, \`text\` = the transcript.
-- server — an HTTP API endpoint. \`method\` + \`endpoint\`.
-- database — a data store (Postgres/MySQL/Redis/MongoDB). \`dbEngine\` (defaults to postgres).
-- card — a labeled box: a titled concept (title + one to three sentences) OR a labeled node in a flow/diagram (\`title\` only, omit \`text\`). Your default for boxes-with-labels.
-- text — a heading, label, or standalone line (no box). Sizing below.
-- rectangle / ellipse / diamond — UNLABELED shapes only (a colored panel behind a group, a divider, a plain node). They render NO text — never use one where a label must show; use a card.
-- aigateway, connect, ec2, fluidcompute, serverlesscompute, computecomparison, requestdemo — Vercel showcase blocks.
+YOU DO NOT LAY ANYTHING OUT. A structure engine owns every coordinate, size, colour, font and connector on the board. You author a semantic plan: a title and a handful of sections, each with a layout primitive and a list of items. There is no way to express a position, and no reason to want one — get the content and the relationships right and the board comes out laid out correctly and consistently.
 
-DESIGN SYSTEM — use these EXACT sizes so the board has real hierarchy (never one uniform grid of identical cards):
-- Board title: ONE text block at the top, \`fontSize\` 40, bold.
-- Section heading: text, \`fontSize\` 28, bold — one above each group.
-- Sub-label / small heading: text, \`fontSize\` 20, bold.
-- Standalone body copy: text, \`fontSize\` 16.
-- Cards: \`width\` 260 standard, or 380 for a detail-heavy card. Titles are ${CARD.titleSize}px and body text ${CARD.bodySize}px by default; set a card's \`fontSize\` higher (e.g. 40) to emphasize a hero/summary card. Cards auto-grow to fit their text.
-- Color: keep most blocks white. Use a light \`fill\` (e.g. #fafafa, #f0f7ff, #f6f8f0) on a card or a background rectangle to group or highlight a section — sparingly.
-- Vary it: mix title-only nodes with detailed cards, standard and wide widths, and the heading scale, so the board reads as a designed layout — not a wall of same-size cards.
+The user has chosen the ${pack.label} style for this board: ${pack.blurb} Author for that style specifically — the guidance below is not general advice, it is what this style is.
 
-RULES:
-- Prefer specialized blocks over cards: code to code, commands to terminal, endpoint to server, data store to database.
-- Emojis: almost never — do NOT put one in every title. At most one or two on the whole board. Titles are plain text.
-- Card text: one to three concise sentences. Consolidate related points; don't flood the board with tiny cards.
-- Flow / sequence: make each step a title-only \`card\` (or a real block where apt), lay them left-to-right (omit x/y), and put ONE \`arrow\` between each pair. Auto-placed arrows snap to the blocks' edges with padding — just alternate: step, arrow, step, arrow, step.
+If a tool rejects your plan it tells you exactly what to change. Fix that specific thing and call the tool again. Do not apologise at length and do not fall back to a worse board.
 
-Blocks auto-layout left-to-right and wrap into rows when x/y are omitted; a text block starts a new row (it's a heading) with the next content below it. Omit x/y unless you need a specific arrangement.
+When a board already exists in this conversation, extend it with extend_board unless the user asks for a brand-new one.
 
-Decide sensibly: if the request is clear, build it immediately in one tool call. When a board already exists in this conversation, extend it with add_blocks unless the user asks for a fresh one.`
+──────────────────────────────────────────
+${loadStyleSkill(style)}`
+}
 
 const createBoardInput = z.object({
   name: z.string().describe("Board name shown in the boards grid."),
-  blocks: z.array(blockSchema).min(1),
+  plan: boardPlanSchema,
 })
 
-const addBlocksInput = z.object({
-  blocks: z.array(blockSchema).min(1),
+const extendBoardInput = z.object({
+  plan: boardExtensionSchema,
 })
 
 interface BuiltBoard {
@@ -94,9 +98,9 @@ function clean(err: unknown): string {
 function toolLabels(toolName: string): { active: string; done: string } {
   switch (toolName) {
     case "create_board":
-      return { active: "Drafting the board", done: "Board created" }
-    case "add_blocks":
-      return { active: "Adding blocks", done: "Blocks added" }
+      return { active: "Planning the board", done: "Board created" }
+    case "extend_board":
+      return { active: "Planning more sections", done: "Sections added" }
   }
   // Everything else is a Notion MCP tool, whose names vary by connector version.
   const name = toolName.toLowerCase()
@@ -123,6 +127,7 @@ export async function POST(req: Request) {
   let body: {
     messages?: { role: "user" | "assistant"; content: string }[]
     model?: string
+    style?: string
     boardId?: string | null
     sources?: Source[]
     userId?: string
@@ -140,6 +145,12 @@ export async function POST(req: Request) {
   if (typeof model !== "string" || !model.includes("/")) {
     return Response.json({ error: "A valid Gateway model id is required." }, { status: 400 })
   }
+  // The style drives both the engine's geometry and the model's instructions, so
+  // there is no sensible default to fall back to — the caller picks it.
+  if (!isStyleId(body.style)) {
+    return Response.json({ error: "A board style is required." }, { status: 400 })
+  }
+  const style = body.style
 
   // Boards the model builds are owned by whoever asked for them, so there has
   // to be someone to own them. Checked up front rather than letting the create
@@ -180,9 +191,13 @@ export async function POST(req: Request) {
 
       let notionClient: MCPClient | null = null
 
+      // Adjustments the engine made on the model's behalf, surfaced once at the
+      // end rather than as noise mid-build.
+      const notes: string[] = []
+
       try {
         let notionTools: ToolSet = {}
-        let system = SYSTEM
+        let system = baseSystem(style)
 
         // When the user attached Notion pages, open an MCP client to Notion
         // (authed per-user through Vercel Connect) and hand its tools to the
@@ -217,11 +232,11 @@ export async function POST(req: Request) {
             return
           }
 
-          system = `${SYSTEM}\n\nThe user attached these Notion pages as sources:\n${notionSources
+          system = `${system}\n\n──────────────────────────────────────────\nThe user attached these Notion pages as sources:\n${notionSources
             .map((s) => `- ${s.url}`)
             .join(
               "\n",
-            )}\nUse the available Notion tools to read them first, then build the board from their real content — headings become cards or text, code samples become code blocks, and so on.`
+            )}\nUse the available Notion tools to read them first, then build the board from their real content. Map what you find onto the item kinds above — a code sample is a \`code\` item, a shell transcript is \`terminal\`, a list is \`bullets\`, a paragraph is \`prose\`, an image URL is \`image\`. Never invent content the page doesn't contain.`
         }
 
         step("plan", "Planning the board", "active")
@@ -237,58 +252,69 @@ export async function POST(req: Request) {
           system,
           messages,
           abortSignal: req.signal,
-          // Extra steps when Notion tools are in play: read the page(s), then build.
-          stopWhen: stepCountIs(notionSources.length > 0 ? 8 : 4),
+          // Extra steps when Notion tools are in play: read the page(s), then
+          // build. The budget also has to leave room for one retry after a
+          // guard rejects a plan, which is the whole point of those messages.
+          stopWhen: stepCountIs(notionSources.length > 0 ? 10 : 6),
           tools: {
             ...notionTools,
             create_board: tool({
               description:
-                "Create a new Canvas board populated with blocks. Use this for the first board in the conversation, or when the user asks for a brand-new board.",
+                "Create a new Canvas board from a plan. Use this for the first board in the conversation, or when the user asks for a brand-new one.",
               inputSchema: createBoardInput,
-              execute: async ({ name, blocks }) => {
+              execute: async ({ name, plan }) => {
                 try {
-                  const hydrated = hydrateBlocks(blocks)
+                  const result = buildBoard(plan, style)
                   const id = await boards.createBoardFromData(name, {
-                    elements: hydrated.elements,
+                    elements: result.elements,
                     camera: { x: 0, y: 0, zoom: 1 },
                   })
                   currentBoardId = id
-                  built = { id, name, blocks: hydrated.elements.length }
-                  return `Created board "${name}" with ${hydrated.elements.length} blocks (id: ${id}).`
+                  built = { id, name, blocks: result.elements.length }
+                  notes.push(...result.warnings)
+                  return `Created board "${name}" — ${describeBoard(result.elements)}. Done; do not call another tool.`
                 } catch (err) {
-                  if (err instanceof BlockSpecError) {
-                    return `Could not build the board: ${err.message} Fix the blocks and try again.`
+                  if (err instanceof PlanRejectedError) {
+                    return `Plan rejected: ${err.message} Revise the plan and call create_board again.`
+                  }
+                  if (err instanceof LayoutError) {
+                    return `The plan could not be laid out: ${err.message} Try fewer items per section.`
                   }
                   throw err
                 }
               },
             }),
-            add_blocks: tool({
+            extend_board: tool({
               description:
-                "Append blocks to the board already being built in this conversation. New blocks flow in below the existing content.",
-              inputSchema: addBlocksInput,
-              execute: async ({ blocks }) => {
+                "Append sections to the board already being built in this conversation. New sections flow in below the existing content.",
+              inputSchema: extendBoardInput,
+              execute: async ({ plan }) => {
                 if (!currentBoardId) {
                   return "No board exists yet — call create_board first."
                 }
                 const board = await boards.getBoard(currentBoardId)
                 if (!board) return "The board no longer exists — call create_board to make a new one."
                 try {
-                  const hydrated = hydrateBlocks(blocks, {
+                  const result = buildBoard({ title: "", ...plan }, style, {
                     existing: board.data.elements,
+                    includeTitle: false,
                   })
                   await boards.saveBoard(currentBoardId, {
                     data: {
                       ...board.data,
-                      elements: [...board.data.elements, ...hydrated.elements],
+                      elements: [...board.data.elements, ...result.elements],
                     },
                   })
-                  const total = board.data.elements.length + hydrated.elements.length
+                  const total = board.data.elements.length + result.elements.length
                   built = { id: currentBoardId, name: board.name, blocks: total }
-                  return `Added ${hydrated.elements.length} blocks to "${board.name}" (now ${total}).`
+                  notes.push(...result.warnings)
+                  return `Added ${result.elements.length} elements to "${board.name}" (now ${total}). Done; do not call another tool.`
                 } catch (err) {
-                  if (err instanceof BlockSpecError) {
-                    return `Could not add the blocks: ${err.message} Fix them and try again.`
+                  if (err instanceof PlanRejectedError) {
+                    return `Plan rejected: ${err.message} Revise the sections and call extend_board again.`
+                  }
+                  if (err instanceof LayoutError) {
+                    return `The sections could not be laid out: ${err.message} Try fewer items per section.`
                   }
                   throw err
                 }
@@ -311,13 +337,15 @@ export async function POST(req: Request) {
               planDone()
               // Now that the arguments are complete, say what's actually being
               // built rather than just which tool is running.
-              const input = part.input as { name?: string; blocks?: unknown[] } | undefined
-              const count = Array.isArray(input?.blocks) ? input.blocks.length : 0
+              const input = part.input as
+                | { name?: string; plan?: { sections?: unknown[] } }
+                | undefined
+              const sections = Array.isArray(input?.plan?.sections) ? input.plan.sections.length : 0
               let label = toolLabels(part.toolName).active
-              if (part.toolName === "create_board" && count) {
-                label = `Drafting "${input?.name ?? "board"}" — ${count} block${count === 1 ? "" : "s"}`
-              } else if (part.toolName === "add_blocks" && count) {
-                label = `Adding ${count} block${count === 1 ? "" : "s"}`
+              if (part.toolName === "create_board" && sections) {
+                label = `Laying out "${input?.name ?? "board"}" — ${sections} section${sections === 1 ? "" : "s"}`
+              } else if (part.toolName === "extend_board" && sections) {
+                label = `Laying out ${sections} more section${sections === 1 ? "" : "s"}`
               }
               step(part.toolCallId, label, "active")
               break
@@ -326,8 +354,8 @@ export async function POST(req: Request) {
               const done = toolLabels(part.toolName).done
               const board = built as BuiltBoard | null
               const label =
-                (part.toolName === "create_board" || part.toolName === "add_blocks") && board
-                  ? `${board.name} — ${board.blocks} block${board.blocks === 1 ? "" : "s"}`
+                (part.toolName === "create_board" || part.toolName === "extend_board") && board
+                  ? `${board.name} — ${board.blocks} element${board.blocks === 1 ? "" : "s"}`
                   : done
               step(part.toolCallId, label, "done")
               break
@@ -367,11 +395,17 @@ export async function POST(req: Request) {
         // it keeps its declared type instead of narrowing to `null`.
         const finalBoard = built as BuiltBoard | null
 
-        const reply =
+        let reply =
           text.trim() ||
           (finalBoard
-            ? `Done — I built "${finalBoard.name}" with ${finalBoard.blocks} blocks.`
+            ? `Done — I built "${finalBoard.name}" in the ${stylePack(style).label} style.`
             : "I wasn't able to build anything from that — could you add more detail?")
+
+        // Surface what the engine changed on the model's behalf, deduped: a
+        // dropped connector or a remapped layout is worth knowing about.
+        if (finalBoard && notes.length > 0) {
+          reply = `${reply}\n\n${[...new Set(notes)].map((n) => `· ${n}`).join("\n")}`
+        }
 
         emit({
           type: "done",

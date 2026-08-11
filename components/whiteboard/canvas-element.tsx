@@ -1058,7 +1058,9 @@ function CardView({ el }: { el: CanvasElement }) {
             position: "relative",
             padding: "0 16px 14px",
             fontFamily: fontStack(el.fontFamily),
-            fontSize: CARD.bodySize,
+            // Falls back to the design-system default, so every card drawn or
+            // saved before this existed keeps the body size it had.
+            fontSize: el.bodyFontSize ?? CARD.bodySize,
             lineHeight: 1.5,
             color: el.text ? "#444" : "#9ca3af",
             whiteSpace: "pre-wrap",
@@ -2824,7 +2826,11 @@ function ImageView({ el, b }: { el: CanvasElement; b: { width: number; height: n
       style={{
         width: "100%",
         height: "100%",
-        objectFit: "fill",
+        // `cover` rather than `fill` so an image box whose aspect ratio doesn't
+        // match the image crops instead of stretching. Inserted images are sized
+        // to their intrinsic ratio (see insert-image.ts) so this is a no-op for
+        // them; it's what lets the board engine lay out a row of uniform frames.
+        objectFit: "cover",
         borderRadius: el.rounded ? 8 : 0,
         display: "block",
         userSelect: "none",

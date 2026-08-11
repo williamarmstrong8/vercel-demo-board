@@ -13,6 +13,7 @@ import {
   RotateCcw,
 } from "lucide-react"
 import { FALLBACK_MODELS, pickDefaultModel, type BuilderModel } from "@/lib/ai/models"
+import { STYLE_IDS, STYLE_META, type StyleId } from "@/lib/boards/styles"
 import {
   BUILD_STREAM_CONTENT_TYPE,
   type BuildEvent,
@@ -145,6 +146,10 @@ function BuilderModal({ onClose }: { onClose: () => void }) {
   const router = useRouter()
   const [models, setModels] = useState<BuilderModel[]>(FALLBACK_MODELS)
   const [model, setModel] = useState<string>(() => pickDefaultModel(FALLBACK_MODELS))
+  // The style is the user's choice, not the model's: it selects the engine's
+  // design tokens and layout vocabulary as well as the authoring skill the model
+  // is given, so it decides what the board looks like more than the prompt does.
+  const [style, setStyle] = useState<StyleId>("visual")
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
@@ -292,6 +297,7 @@ function BuilderModal({ onClose }: { onClose: () => void }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           model,
+          style,
           boardId,
           sources,
           userId: userIdRef.current,
@@ -481,6 +487,16 @@ function BuilderModal({ onClose }: { onClose: () => void }) {
         {/* Composer — attached sources sit inside the input, above the text, so
             it's clear they're being sent along with the prompt. */}
         <div className="border-t border-border p-3">
+          <StylePicker
+            value={style}
+            onChange={setStyle}
+            disabled={loading}
+            // Once a board exists, follow-up turns append to it — switching the
+            // design system halfway down a board would be the one way left to
+            // make it look inconsistent.
+            locked={!!boardId}
+          />
+
           <div className="relative flex flex-col gap-2 rounded-xl border border-border bg-background px-2 py-2 focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30">
             {sources.length > 0 && (
               <div className="flex flex-wrap gap-1.5 pl-0.5 pt-0.5">
@@ -552,6 +568,63 @@ function BuilderModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Which of the three design systems the board is built with. A segmented control
+ * rather than a dropdown because it is a deliberate up-front choice, not a
+ * setting — the style changes the layout vocabulary available to the model, not
+ * just the colors.
+ */
+function StylePicker({
+  value,
+  onChange,
+  disabled,
+  locked,
+}: {
+  value: StyleId
+  onChange: (style: StyleId) => void
+  disabled: boolean
+  locked: boolean
+}) {
+  const frozen = disabled || locked
+  return (
+    <div className="mb-2.5">
+      <div
+        role="radiogroup"
+        aria-label="Board style"
+        className="flex gap-1 rounded-xl bg-muted p-1"
+      >
+        {STYLE_IDS.map((id) => {
+          const active = id === value
+          return (
+            <button
+              key={id}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              disabled={frozen}
+              onClick={() => onChange(id)}
+              className={cn(
+                "flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
+                active
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+                frozen && "cursor-not-allowed opacity-60 hover:text-muted-foreground",
+              )}
+            >
+              {STYLE_META[id].label}
+            </button>
+          )
+        })}
+      </div>
+      <p className="mt-1.5 px-1 text-[11px] leading-relaxed text-muted-foreground">
+        {locked
+          ? `${STYLE_META[value].label} style — fixed for the rest of this board.`
+          : STYLE_META[value].blurb}
+      </p>
     </div>
   )
 }
