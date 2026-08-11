@@ -1,11 +1,12 @@
 import { pgTable, text, jsonb, boolean, timestamp, index, primaryKey } from "drizzle-orm/pg-core"
-import type { CanvasElement, Camera } from "@/lib/whiteboard/types"
+import type { BackgroundStyle, CanvasElement, Camera } from "@/lib/whiteboard/types"
 
 // The serialized canvas payload stored in the `data` JSONB column. This mirrors
 // the shape the client store works with for a single board.
 export interface BoardData {
   elements: CanvasElement[]
   camera: Camera
+  backgroundStyle?: BackgroundStyle
 }
 
 // A whiteboard board. `ownerId` is the Vercel identity (`sub` claim) of whoever

@@ -2,7 +2,19 @@ import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { GeistSans } from 'geist/font/sans'
 import { GeistMono } from 'geist/font/mono'
+import { Architects_Daughter } from 'next/font/google'
 import './globals.css'
+
+// The hand-drawn option for canvas text (see lib/whiteboard/fonts.ts). An
+// architect's print hand, so it still reads at small sizes on a busy board —
+// the same reason Excalidraw pairs its sketched shapes with Excalifont rather
+// than a script face.
+const handwriting = Architects_Daughter({
+  weight: '400',
+  subsets: ['latin'],
+  variable: '--font-hand',
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
   title: 'Canvas — infinite whiteboard',
@@ -41,7 +53,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`dark ${GeistSans.variable} ${GeistMono.variable} bg-background`}
+      className={`dark ${GeistSans.variable} ${GeistMono.variable} ${handwriting.variable} bg-background`}
     >
       <body className="antialiased">
         {children}

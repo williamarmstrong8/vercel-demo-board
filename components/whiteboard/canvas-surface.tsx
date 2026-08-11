@@ -13,6 +13,7 @@ import {
   computeSnap,
   snapEdgeToTargets,
   snapToGrid,
+  type Bounds,
   type SnapGuide,
 } from "@/lib/whiteboard/geometry"
 import { GRID_SIZE, SNAP_THRESHOLD, type CanvasElement } from "@/lib/whiteboard/types"
@@ -27,8 +28,24 @@ type Gesture =
   | {
       mode: "move"
       startWorld: { x: number; y: number }
+      startScreen: { x: number; y: number }
       origins: Record<string, { x: number; y: number }>
-      moved: boolean
+      // Screen-space distance the pointer must travel before this becomes a
+      // real drag; until then the press is treated as a click and nothing moves.
+      threshold: number
+      // Flips once the threshold is beaten. Also gates the undo snapshot, so a
+      // press that never becomes a drag leaves no history entry behind.
+      dragging: boolean
+      // Everything below is resolved once, on the frame the drag actually
+      // starts, so no frame after that has to walk the element list: the DOM
+      // nodes being carried, the elements that stay put (the snap targets), and
+      // the selection's bounds before it moved.
+      nodes: HTMLElement[]
+      staticEls: CanvasElement[]
+      originBounds: Bounds | null
+      // World-space delta already applied to `nodes`, and therefore the delta to
+      // commit to the store on drop.
+      offset: { dx: number; dy: number }
     }
   | {
       mode: "resize"
@@ -38,6 +55,45 @@ type Gesture =
       origEls: CanvasElement[]
     }
   | { mode: "marquee"; startScreen: { x: number; y: number }; additive: boolean }
+
+// How far the pointer has to travel before a press on an element turns into a
+// drag, in screen pixels. Reaching for an element you haven't selected yet is
+// usually a click — to select it, or to open it — so that case gets enough
+// slack to absorb the hand movement a click carries. Once an element is
+// already selected the next press is far more likely to be a deliberate drag,
+// so it only gets enough to swallow genuine jitter.
+const DRAG_THRESHOLD_PX = 6
+const DRAG_THRESHOLD_SELECTED = 3
+
+// The only bits of a pointer event the gesture handlers read. Kept as a plain
+// snapshot because moves are processed one frame late (see the pointermove
+// listener) and a real PointerEvent's fields aren't safe to read by then.
+type PointerSnapshot = { clientX: number; clientY: number; shiftKey: boolean }
+
+// Whether positions quantize to the 20px grid, which is deliberately tied to
+// the board actually *showing* a grid.
+//
+// This used to be on for every board, and only near the lines: anything within
+// SNAP_THRESHOLD of a grid line was pulled onto it. On an invisible grid that
+// doesn't read as snapping, it reads as the drag sticking — the block holds
+// still through most of the pointer's travel, then jumps most of a cell at
+// once. With the grid on screen the same stepping reads as intentional, so
+// there we quantize outright rather than only near the lines (it's the partial
+// pull, with its sticky dead zone around each line, that feels broken).
+//
+// Element-to-element alignment snapping is unaffected either way — that one has
+// a visible cause (the guide line) the moment it engages.
+function gridSnap(project: { backgroundStyle?: string }) {
+  return project.backgroundStyle === "grid"
+}
+
+function sameGuides(a: SnapGuide[], b: SnapGuide[]) {
+  if (a.length !== b.length) return false
+  return a.every((g, i) => {
+    const o = b[i]
+    return g.axis === o.axis && g.position === o.position && g.start === o.start && g.end === o.end
+  })
+}
 
 // Exact unit vectors for each 45° octant. Deriving these from cos/sin of a
 // computed angle (e.g. Math.cos(Math.PI / 2)) leaves tiny floating-point
@@ -146,6 +202,9 @@ export function CanvasSurface() {
 
   const camera = useWhiteboard((s) => (s.projects.find((p) => p.id === s.currentId) ?? s.projects[0]).camera)
   const elements = useWhiteboard((s) => (s.projects.find((p) => p.id === s.currentId) ?? s.projects[0]).elements)
+  const backgroundStyle = useWhiteboard(
+    (s) => (s.projects.find((p) => p.id === s.currentId) ?? s.projects[0]).backgroundStyle ?? "plain",
+  )
   const selectedIds = useWhiteboard((s) => s.selectedIds)
   const editingId = useWhiteboard((s) => s.editingId)
   const tool = useWhiteboard((s) => s.tool)
@@ -165,6 +224,8 @@ export function CanvasSurface() {
   const [marquee, setMarquee] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
   const [dropActive, setDropActive] = useState(false)
   const dragDepth = useRef(0)
+  const selectionBoxRef = useRef<HTMLDivElement>(null)
+  const guidesRef = useRef<SnapGuide[]>([])
 
   const rect = () => containerRef.current?.getBoundingClientRect()
 
@@ -172,6 +233,69 @@ export function CanvasSurface() {
     const r = rect()
     return { x: e.clientX - (r?.left ?? 0), y: e.clientY - (r?.top ?? 0) }
   }, [])
+
+  // Guides are recomputed on every frame of a drag but only actually change when
+  // the selection crosses an alignment, so re-render on the change, not the
+  // recompute.
+  const publishGuides = useCallback((next: SnapGuide[]) => {
+    if (sameGuides(guidesRef.current, next)) return
+    guidesRef.current = next
+    setGuides(next)
+  }, [])
+
+  const collectDragNodes = useCallback((ids: string[]) => {
+    const root = containerRef.current
+    if (!root) return []
+    const nodes: HTMLElement[] = []
+    for (const id of ids) {
+      const node = root.querySelector<HTMLElement>(`[data-el-id="${id}"]`)
+      if (node) nodes.push(node)
+    }
+    return nodes
+  }, [])
+
+  // A drag writes its offset straight to the DOM instead of pushing new
+  // coordinates through the store on every frame. The elements keep their
+  // committed x/y for the whole gesture and only get real ones on drop, so
+  // nothing re-renders while the pointer is moving — which is what a drag needs,
+  // because the expensive blocks (code, file trees, channel UIs) cost far more
+  // to re-render than a frame has to spend.
+  //
+  // `translate` rather than `transform`: the element wrapper already uses
+  // `transform` for rotation, and the two are separate CSS properties that
+  // compose. React never writes `translate`, so a re-render triggered by
+  // something else mid-drag can't wipe the offset either.
+  const applyDragOffset = useCallback((nodes: HTMLElement[], dx: number, dy: number, zoom: number) => {
+    const t = `${dx}px ${dy}px`
+    for (const node of nodes) node.style.translate = t
+    // The overlay is drawn in screen space, so its offset is the world delta
+    // scaled by the camera.
+    const box = selectionBoxRef.current
+    if (box) box.style.translate = `${dx * zoom}px ${dy * zoom}px`
+  }, [])
+
+  const clearDragOffset = useCallback((nodes: HTMLElement[]) => {
+    for (const node of nodes) node.style.translate = ""
+    const box = selectionBoxRef.current
+    if (box) box.style.translate = ""
+  }, [])
+
+  // Hand the drag's accumulated offset to the store as one write. Called on
+  // drop, after the DOM offsets are cleared, so the elements never flash between
+  // the two representations of the same position.
+  const commitMove = useCallback(
+    (g: Extract<Gesture, { mode: "move" }>) => {
+      clearDragOffset(g.nodes)
+      const { dx, dy } = g.offset
+      if (dx === 0 && dy === 0) return
+      const patches: Record<string, Partial<CanvasElement>> = {}
+      for (const [id, origin] of Object.entries(g.origins)) {
+        patches[id] = { x: origin.x + dx, y: origin.y + dy }
+      }
+      useWhiteboard.getState().updateMany(patches)
+    },
+    [clearDragOffset],
+  )
 
   const hitTest = useCallback((wx: number, wy: number, els: CanvasElement[]): CanvasElement | null => {
     for (let i = els.length - 1; i >= 0; i--) {
@@ -364,12 +488,21 @@ export function CanvasSurface() {
   }, [])
 
   // ---- global pointer move/up while gesturing ----
+  // Pointer events arrive far faster than the screen repaints — a 1000Hz mouse
+  // delivers a dozen per frame — and each one used to run a full snap solve, a
+  // store write and a React render. All of that work beyond the last event per
+  // frame is thrown away by the compositor anyway, so every move is coalesced
+  // into one rAF-aligned pass.
   useEffect(() => {
-    const onMove = (e: PointerEvent) => {
+    let frame = 0
+    let pending: PointerSnapshot | null = null
+
+    const handleMove = (e: PointerSnapshot) => {
       const store = useWhiteboard.getState()
       const g = gesture.current
-      const cam = (store.projects.find((p) => p.id === store.currentId) ?? store.projects[0]).camera
-      const els = (store.projects.find((p) => p.id === store.currentId) ?? store.projects[0]).elements
+      const proj = store.projects.find((p) => p.id === store.currentId) ?? store.projects[0]
+      const cam = proj.camera
+      const els = proj.elements
       const screen = toScreen(e)
       const world = screenToWorld(screen.x, screen.y, cam)
 
@@ -429,39 +562,43 @@ export function CanvasSurface() {
         }
         store.update([g.id], { width: w, height: h })
       } else if (g.mode === "move") {
-        g.moved = true
+        // Hold the elements still until the pointer has clearly committed to a
+        // drag, so clicking a card to get at it can't nudge it out of place.
+        // Measured in screen pixels, not world units, so the friction feels the
+        // same however far the board is zoomed in or out.
+        if (!g.dragging) {
+          if (Math.hypot(screen.x - g.startScreen.x, screen.y - g.startScreen.y) < g.threshold) return
+          g.dragging = true
+          // Snapshot for undo now rather than on press: nothing has moved yet,
+          // so this still captures the pre-drag positions.
+          store.beginInteraction()
+          // Resolve the per-drag constants here, not on press, so a click that
+          // never becomes a drag does none of this work.
+          g.nodes = collectDragNodes(Object.keys(g.origins))
+          g.staticEls = els.filter((el) => !g.origins[el.id])
+          g.originBounds = getSelectionBounds(els.filter((el) => g.origins[el.id]))
+        }
         let dx = world.x - g.startWorld.x
         let dy = world.y - g.startWorld.y
-        const selEls = els.filter((el) => g.origins[el.id])
-        // moving bounds from origins
-        const movingEls = selEls.map((el) => ({
-          ...el,
-          x: g.origins[el.id].x + dx,
-          y: g.origins[el.id].y + dy,
-        }))
-        const mb = getSelectionBounds(movingEls)
-        if (mb) {
-          const others = els.filter((el) => !g.origins[el.id])
-          const snap = computeSnap(mb, others, thr)
+        const ob = g.originBounds
+        if (ob) {
+          // Every carried element shifts by the same delta, so the selection's
+          // bounds are just its pre-drag bounds translated — no need to rebuild
+          // them from the element list on each frame.
+          const mb = { x: ob.x + dx, y: ob.y + dy, width: ob.width, height: ob.height }
+          const snap = computeSnap(mb, g.staticEls, thr)
           dx += snap.dx
           dy += snap.dy
-          const newGuides = [...snap.guides]
-          // grid fallback per axis
-          if (snap.dx === 0) {
-            const gx = snapToGrid(mb.x, GRID_SIZE)
-            if (Math.abs(gx - mb.x) <= thr) dx += gx - mb.x
+          if (gridSnap(proj)) {
+            if (snap.dx === 0) dx += snapToGrid(mb.x, GRID_SIZE) - mb.x
+            if (snap.dy === 0) dy += snapToGrid(mb.y, GRID_SIZE) - mb.y
           }
-          if (snap.dy === 0) {
-            const gy = snapToGrid(mb.y, GRID_SIZE)
-            if (Math.abs(gy - mb.y) <= thr) dy += gy - mb.y
-          }
-          setGuides(newGuides)
+          publishGuides(snap.guides)
         }
-        for (const el of selEls) {
-          store.update([el.id], { x: g.origins[el.id].x + dx, y: g.origins[el.id].y + dy })
-        }
+        g.offset = { dx, dy }
+        applyDragOffset(g.nodes, dx, dy, cam.zoom)
       } else if (g.mode === "resize") {
-        handleResize(g, world, store, thr, e.shiftKey, cam.zoom)
+        handleResize(g, world, store, thr, e.shiftKey, cam.zoom, gridSnap(proj))
       } else if (g.mode === "marquee") {
         const x = Math.min(g.startScreen.x, screen.x)
         const y = Math.min(g.startScreen.y, screen.y)
@@ -483,13 +620,42 @@ export function CanvasSurface() {
             )
           })
           .map((el) => el.id)
-        store.select(hits)
+        // Most marquee frames don't change what's inside the box; re-selecting
+        // the same ids would hand every selection-aware panel a fresh array and
+        // make it re-render for nothing.
+        const sel = store.selectedIds
+        const unchanged = hits.length === sel.length && hits.every((id, i) => sel[i] === id)
+        if (!unchanged) store.select(hits)
       }
     }
 
-    const onUp = (e: PointerEvent) => {
+    const flush = () => {
+      frame = 0
+      const p = pending
+      pending = null
+      if (p) handleMove(p)
+    }
+
+    const onMove = (e: PointerEvent) => {
+      pending = { clientX: e.clientX, clientY: e.clientY, shiftKey: e.shiftKey }
+      if (!frame) frame = requestAnimationFrame(flush)
+    }
+
+    const onUp = () => {
+      // Land the last pointer position before closing the gesture out, so a drop
+      // ends up exactly under the cursor rather than up to a frame behind it.
+      if (frame) {
+        cancelAnimationFrame(frame)
+        flush()
+      }
       const store = useWhiteboard.getState()
       const g = gesture.current
+      if (g.mode === "move") {
+        // Turns the drag's DOM-only offset into real coordinates. Safe to call
+        // even for a press that never crossed the threshold — the offset is
+        // still zero, so it's a no-op.
+        commitMove(g)
+      }
       if (g.mode === "create") {
         const els = (store.projects.find((p) => p.id === store.currentId) ?? store.projects[0]).elements
         const el = els.find((x) => x.id === g.id)
@@ -507,18 +673,24 @@ export function CanvasSurface() {
         store.select([g.id])
       }
       if (g.mode === "marquee") setMarquee(null)
-      setGuides([])
+      publishGuides([])
       store.setSnapTarget(null)
       gesture.current = { mode: "idle" }
     }
 
     window.addEventListener("pointermove", onMove)
     window.addEventListener("pointerup", onUp)
+    // A cancelled pointer (an OS gesture takes over, the tab loses the pointer)
+    // never delivers pointerup, which would otherwise leave a drag stuck holding
+    // its DOM offset with nothing committed.
+    window.addEventListener("pointercancel", onUp)
     return () => {
+      if (frame) cancelAnimationFrame(frame)
       window.removeEventListener("pointermove", onMove)
       window.removeEventListener("pointerup", onUp)
+      window.removeEventListener("pointercancel", onUp)
     }
-  }, [toScreen])
+  }, [toScreen, applyDragOffset, collectDragNodes, commitMove, publishGuides])
 
   const handleResize = (
     g: Extract<Gesture, { mode: "resize" }>,
@@ -527,6 +699,7 @@ export function CanvasSurface() {
     thr: number,
     lockAngle: boolean,
     zoom: number,
+    snapGrid: boolean,
   ) => {
     // line endpoints
     if ((g.handle === "start" || g.handle === "end") && g.origEls.length === 1) {
@@ -545,10 +718,8 @@ export function CanvasSurface() {
         px = snapped.x
         py = snapped.y
       } else {
-        const gx = snapToGrid(world.x, GRID_SIZE)
-        const gy = snapToGrid(world.y, GRID_SIZE)
-        px = Math.abs(gx - world.x) < SNAP_THRESHOLD ? gx : world.x
-        py = Math.abs(gy - world.y) < SNAP_THRESHOLD ? gy : world.y
+        px = snapGrid ? snapToGrid(world.x, GRID_SIZE) : world.x
+        py = snapGrid ? snapToGrid(world.y, GRID_SIZE) : world.y
       }
       if (lockAngle && (el.type === "arrow" || el.type === "line")) {
         const anchorX = g.handle === "start" ? el.x + el.width : el.x
@@ -588,8 +759,7 @@ export function CanvasSurface() {
         newGuides.push(snap.guide)
         return snap.value
       }
-      const grid = snapToGrid(value, GRID_SIZE)
-      return Math.abs(grid - value) < SNAP_THRESHOLD / 2 ? grid : value
+      return snapGrid ? snapToGrid(value, GRID_SIZE) : value
     }
 
     if (h.includes("w") || h.includes("e")) {
@@ -621,7 +791,7 @@ export function CanvasSurface() {
       newGuides.length = 0
     }
 
-    setGuides(newGuides)
+    publishGuides(newGuides)
     const nb = {
       x: Math.min(left, right),
       y: Math.min(top, bottom),
@@ -630,6 +800,10 @@ export function CanvasSurface() {
     }
     const scaleX = ob.width === 0 ? 1 : nb.width / ob.width
     const scaleY = ob.height === 0 ? 1 : nb.height / ob.height
+    // One write for the whole selection: a resize genuinely has to re-render
+    // (the content reflows), but it should cost one render per frame, not one
+    // per element.
+    const patches: Record<string, Partial<CanvasElement>> = {}
     for (const el of g.origEls) {
       const relX = el.x - ob.x
       const relY = el.y - ob.y
@@ -642,8 +816,9 @@ export function CanvasSurface() {
       if (el.type === "text" && el.fontSize) {
         patch.fontSize = Math.max(8, el.fontSize * scaleY)
       }
-      store.update([el.id], patch)
+      patches[el.id] = patch
     }
+    store.updateMany(patches)
   }
 
   // ---- surface pointer down ----
@@ -679,7 +854,7 @@ export function CanvasSurface() {
     }
 
     // creation tools
-    if (["rectangle", "ellipse", "diamond", "arrow", "line", "text", "card", "code", "terminal", "server", "database", "filetree", "aigateway", "ec2", "fluidcompute", "serverlesscompute", "computecomparison", "requestdemo"].includes(tool)) {
+    if (["rectangle", "ellipse", "diamond", "arrow", "line", "text", "card", "code", "terminal", "server", "database", "filetree", "aigateway", "connect", "ec2", "fluidcompute", "serverlesscompute", "computecomparison", "requestdemo"].includes(tool)) {
       // starting an arrow/line on a highlighted shape snaps the start point
       // just off that shape's outline rather than the raw click position
       let startX = world.x
@@ -706,6 +881,7 @@ export function CanvasSurface() {
         tool === "database" ||
         tool === "filetree" ||
         tool === "aigateway" ||
+        tool === "connect" ||
         tool === "ec2" ||
         tool === "fluidcompute" ||
         tool === "serverlesscompute" ||
@@ -772,8 +948,22 @@ export function CanvasSurface() {
           }
         }
       }
-      store.beginInteraction()
-      gesture.current = { mode: "move", startWorld: world, origins, moved: false }
+      // beginInteraction is deferred to the first real drag frame (see onMove)
+      // so a press that never crosses the threshold neither records an undo
+      // step nor discards the redo stack.
+      gesture.current = {
+        mode: "move",
+        startWorld: world,
+        startScreen: screen,
+        origins,
+        threshold: already ? DRAG_THRESHOLD_SELECTED : DRAG_THRESHOLD_PX,
+        dragging: false,
+        // Filled in on the first real drag frame, along with beginInteraction.
+        nodes: [],
+        staticEls: [],
+        originBounds: null,
+        offset: { dx: 0, dy: 0 },
+      }
     } else {
       if (!e.shiftKey) store.clearSelection()
       gesture.current = { mode: "marquee", startScreen: screen, additive: e.shiftKey }
@@ -831,6 +1021,24 @@ export function CanvasSurface() {
           ? "default"
           : "crosshair"
 
+  // The paper pattern stays a fixed screen-space texture — it pans with the
+  // camera but its spacing never scales with zoom. Only the content layer
+  // below is transformed by camera.zoom.
+  const gridPx = GRID_SIZE
+  const dotRadius = 1
+  const lineColor = theme === "dark" ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.08)"
+  const dotColor = theme === "dark" ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.18)"
+
+  // The pattern repeats every gridPx, so only the offset within a single tile
+  // matters — wrapping it keeps background-position in [0, gridPx) instead of
+  // handing the browser an origin thousands of pixels off-screen, which is
+  // where it stops tiling and leaves the canvas blank. Pan far enough from the
+  // origin (a long pasted text block does it easily) and the raw camera
+  // offset gets there.
+  const gridOffsetX = ((camera.x % gridPx) + gridPx) % gridPx
+  const gridOffsetY = ((camera.y % gridPx) + gridPx) % gridPx
+  const patternHidden = gridPx < 8 ? 0 : 1
+
   return (
     <div
       ref={containerRef}
@@ -840,6 +1048,30 @@ export function CanvasSurface() {
       className="absolute inset-0 touch-none select-none overflow-hidden"
       style={{ cursor, background: theme === "dark" ? "#171717" : "#ffffff" }}
     >
+      {backgroundStyle === "dots" && (
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            backgroundImage: `radial-gradient(${dotColor} ${dotRadius}px, transparent ${dotRadius}px)`,
+            backgroundSize: `${gridPx}px ${gridPx}px`,
+            backgroundPosition: `${gridOffsetX}px ${gridOffsetY}px`,
+            opacity: patternHidden,
+          }}
+        />
+      )}
+
+      {backgroundStyle === "grid" && (
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            backgroundImage: `linear-gradient(${lineColor} 1px, transparent 1px), linear-gradient(90deg, ${lineColor} 1px, transparent 1px)`,
+            backgroundSize: `${gridPx}px ${gridPx}px`,
+            backgroundPosition: `${gridOffsetX}px ${gridOffsetY}px`,
+            opacity: patternHidden,
+          }}
+        />
+      )}
+
       {/* world layer */}
       <div
         style={{
@@ -862,6 +1094,7 @@ export function CanvasSurface() {
         guides={guides}
         marquee={marquee}
         onHandleDown={onHandleDown}
+        boxRef={selectionBoxRef}
       />
 
       {/* Drop affordance. pointer-events-none matters: an overlay that takes

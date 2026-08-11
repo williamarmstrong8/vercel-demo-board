@@ -11,11 +11,16 @@ interface Props {
   guides: SnapGuide[]
   marquee: { x: number; y: number; width: number; height: number } | null
   onHandleDown: (handle: HandleId, e: React.PointerEvent) => void
+  // Handle on the box+handles group, so a drag in progress can slide it with a
+  // single DOM write instead of re-rendering the overlay every frame. It wraps
+  // only the selection box — the alignment guides sit at fixed world positions
+  // and must not move with the selection.
+  boxRef?: React.Ref<HTMLDivElement>
 }
 
 const ACCENT = "#0070f3"
 
-export function SelectionOverlay({ camera, selected, guides, marquee, onHandleDown }: Props) {
+export function SelectionOverlay({ camera, selected, guides, marquee, onHandleDown, boxRef }: Props) {
   const bounds = getSelectionBounds(selected)
   const isLine = selected.length === 1 && (selected[0].type === "arrow" || selected[0].type === "line")
   // The eve agent file-tree and its pinned companion code / channel UI blocks
@@ -80,15 +85,17 @@ export function SelectionOverlay({ camera, selected, guides, marquee, onHandleDo
       )}
 
       {/* selection box + handles */}
-      {bounds && selected.length > 0 && !hideSelection && (
-        <SelectionBox
-          camera={camera}
-          bounds={bounds}
-          isLine={isLine}
-          lineEl={isLine ? selected[0] : null}
-          onHandleDown={onHandleDown}
-        />
-      )}
+      <div ref={boxRef} className="pointer-events-none absolute inset-0">
+        {bounds && selected.length > 0 && !hideSelection && (
+          <SelectionBox
+            camera={camera}
+            bounds={bounds}
+            isLine={isLine}
+            lineEl={isLine ? selected[0] : null}
+            onHandleDown={onHandleDown}
+          />
+        )}
+      </div>
     </div>
   )
 }

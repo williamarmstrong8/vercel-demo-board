@@ -12,6 +12,7 @@ import {
   FolderTree,
   ArrowRight,
   Waypoints,
+  Cable,
   Square,
   HardDrive,
   FunctionSquare,
@@ -124,6 +125,28 @@ const ITEMS: LibraryItem[] = [
     keywords: ["ai", "gateway", "model", "models", "provider", "openai", "anthropic", "llm", "switch", "route"],
     category: "build-ai",
   },
+  {
+    id: "connect",
+    icon: Cable,
+    label: "Vercel Connect",
+    description: "OAuth apps, MCP servers, custom OAuth, API keys — short-lived tokens, no env secrets.",
+    keywords: [
+      "connect",
+      "vercel connect",
+      "oauth",
+      "mcp",
+      "api key",
+      "slack",
+      "github",
+      "linear",
+      "snowflake",
+      "salesforce",
+      "token",
+      "integration",
+      "getToken",
+    ],
+    category: "developer-tools",
+  },
 ]
 
 // Icons used to sketch a template's flow inside its thumbnail.
@@ -134,6 +157,7 @@ const NODE_ICONS: Partial<Record<ElementType, React.ComponentType<{ className?: 
   terminal: SquareTerminal,
   filetree: FolderTree,
   aigateway: Waypoints,
+  connect: Cable,
   ec2: HardDrive,
   fluidcompute: FunctionSquare,
   serverlesscompute: FunctionSquare,
@@ -194,6 +218,16 @@ export function ComponentLibrary() {
   const setTool = useWhiteboard((s) => s.setTool)
   const setPendingTemplate = useWhiteboard((s) => s.setPendingTemplate)
   const clearSelection = useWhiteboard((s) => s.clearSelection)
+  const setLibraryOpen = useWhiteboard((s) => s.setLibraryOpen)
+
+  // Mirrors `open` into the store so chrome outside this component's own DOM
+  // subtree (the bottom-left zoom controls/theme toggle) can react to the
+  // modal being up. Also resets it on unmount, so a board swap mid-open
+  // never leaves other chrome stuck disabled.
+  useEffect(() => {
+    setLibraryOpen(open)
+    return () => setLibraryOpen(false)
+  }, [open, setLibraryOpen])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

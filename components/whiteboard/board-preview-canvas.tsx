@@ -7,6 +7,7 @@ import { CanvasElementView } from "@/components/whiteboard/canvas-element"
 import { useSiteTheme } from "@/components/site-theme"
 import type { BoardSummary } from "@/app/actions/boards"
 import type { Project } from "@/lib/whiteboard/types"
+import { GRID_SIZE } from "@/lib/whiteboard/types"
 
 // Mirrors canvas-surface.tsx's own light/dark paper colors exactly, so the
 // thumbnail is a true preview rather than an approximation.
@@ -28,6 +29,21 @@ export function BoardPreviewCanvas({ board }: { board: BoardSummary }) {
   const [ready, setReady] = useState(false)
   const { theme } = useSiteTheme()
   const canvasBg = CANVAS_BG[theme]
+  const backgroundStyle = board.data.backgroundStyle ?? "plain"
+  const lineColor = theme === "dark" ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.08)"
+  const dotColor = theme === "dark" ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.18)"
+  const backgroundPatternStyle =
+    backgroundStyle === "dots"
+      ? {
+          backgroundImage: `radial-gradient(${dotColor} 1px, transparent 1px)`,
+          backgroundSize: `${GRID_SIZE}px ${GRID_SIZE}px`,
+        }
+      : backgroundStyle === "grid"
+        ? {
+            backgroundImage: `linear-gradient(${lineColor} 1px, transparent 1px), linear-gradient(90deg, ${lineColor} 1px, transparent 1px)`,
+            backgroundSize: `${GRID_SIZE}px ${GRID_SIZE}px`,
+          }
+        : undefined
 
   // Elements come straight from the board prop so the render never races the
   // store subscription. We still push them into this iframe's isolated store
@@ -99,7 +115,7 @@ export function BoardPreviewCanvas({ board }: { board: BoardSummary }) {
     return (
       <div
         className="flex h-full w-full items-center justify-center text-sm text-muted-foreground"
-        style={{ background: canvasBg }}
+        style={{ background: canvasBg, ...backgroundPatternStyle }}
       >
         Empty board
       </div>
@@ -111,7 +127,7 @@ export function BoardPreviewCanvas({ board }: { board: BoardSummary }) {
       ref={containerRef}
       // Fully non-interactive: this is a static snapshot of the live canvas.
       className="relative h-full w-full overflow-hidden"
-      style={{ pointerEvents: "none", background: canvasBg }}
+      style={{ pointerEvents: "none", background: canvasBg, ...backgroundPatternStyle }}
     >
       <div style={worldStyle}>
         {elements.map((el) => (
